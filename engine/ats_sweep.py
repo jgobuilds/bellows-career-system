@@ -9,7 +9,7 @@ then keeps only titles in your lane - at ANY company/industry.
 
 WHY THIS EXISTS (the 2026-07-11 lane-first upgrade):
   The old sweep was company-first and JobSpy/Indeed was ~7% in-lane noise. Every
-  strong role you found by hand (AssetWatch, Momentive, Yahoo, ...) was IN his
+  strong role you found by hand (AssetWatch, Momentive, Yahoo, ...) was IN their
   lane but at a company the old net never polled. This engine flips it: it scans a
   BROAD, cross-industry company list and filters by TITLE, so an in-lane
   "Director/Head/VP of Data ..." surfaces no matter the industry. Industry is a

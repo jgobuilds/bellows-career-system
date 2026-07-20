@@ -1,20 +1,20 @@
-# Career Profile — Maya Okonkwo (WORKED EXAMPLE — fictional)
+# Career Profile — Johnny Fakeuser (WORKED EXAMPLE — fictional)
 
 > **This is a fictional example** showing what a *good* profile looks like when it's finished. Notice how
 > specific it is: real numbers, named tools, and an honest "what I am NOT" section. That specificity is what
 > lets the system write resumes that don't lie and score jobs that don't flatter.
 >
 > It's deliberately in **product marketing, not data** — the system works for any field. Your lane just
-> needs to be described honestly. Maya is **mid-career** here (a PMM reaching for Senior), so the numbers are
+> needs to be described honestly. Johnny is **mid-career** here (a PMM reaching for Senior), so the numbers are
 > deliberately modest — that's what "honest" looks like at this level.
 
 ---
 
 ## Identity & logistics
-- **Name (legal / preferred):** Maya Adaeze Okonkwo / goes by Maya
-- **Header on resumes:** MAYA OKONKWO
+- **Name (legal / preferred):** Johnny Quincy Fakeuser / goes by Johnny
+- **Header on resumes:** JOHNNY FAKEUSER
 - **Location:** Denver, CO
-- **Contact:** 555.555.5555 | maya@example.com | linkedin.com/in/yourprofile
+- **Contact:** 555.555.5555 | johnny@example.com | linkedin.com/in/yourprofile
 - **Work authorization:** US Citizen (only state this on a resume if a posting hard-gates on it)
 - **Geography rules:** Remote-first. Denver metro hybrid OK (≤2 days). Will not relocate.
 - **Comp floor / target:** Floor $115K base. Target $120–150K + equity.
@@ -27,7 +27,7 @@
 - **The throughline:** I turn complex technical products into stories that a skeptical buyer will act on.
 - **Differentiator:** I'll take on pricing and packaging when most PMMs at my level won't. I've owned the
   launch content and competitive framing for two packaging updates, one of which moved landing-page signups
-  31%→45%. That comfort with the hardest part of the story is what sets me apart from other mid-level PMMs.
+  31%→45%. That comfort with the hardest part of the story is what sets me apart from ottheir mid-level PMMs.
 - **Operating philosophy:** I work as a force multiplier for the GTM team. Sales shouldn't have to invent
   the story on the fly — my job is to give them the narrative, the proof, and the objection-handling so they
   can move faster, and then get out of the way.
@@ -55,7 +55,7 @@ _A developer-first API security platform; Series C, ~400 employees._
   - Rewrote the platform's positioning and landing page around a usage-based packaging change: **signups up
     from 31% to 45%** of qualified visitors over three quarters, measured against the pre-launch baseline.
   - Built the competitive content against 4 named rivals — battlecards and an objection-handling one-pager
-    that sales still opens more than any other asset in Highspot.
+    that sales still opens more than any ottheir asset in Highspot.
   - Coordinated the content and enablement for the platform's largest release, working across Product, Sales,
     Support, and Docs over 6 weeks. **1,400 signups in week one**, 3× the prior launch record.
   - Supported the analyst briefings for two release cycles (prep docs, demo scripts) — supported, not owned.
@@ -100,18 +100,18 @@ _A mid-market ERP vendor; ~1,200 employees._
 - **Prior/expired:** Google Analytics Individual Qualification (2019) — always labeled prior, never active
 
 ## Reputation & references
-- **Devon Ruiz** (VP Sales, Cipherworks): "Maya is the only marketer our reps actually listen to. She sits in
-  on calls, so what she gives them works."
-- **Sam Whitfield** (CPO, Northwind): "She was one of our first marketing hires and set up the fundamentals.
-  The repositioning she helped with is part of how we got acquired."
+- **Devon Sample** (VP Sales, Cipherworks): "Johnny is the only marketer our reps actually listen to. They sit in
+  on calls, so what they hand the reps actually works."
+- **Sam Example** (CPO, Northwind): "They were one of our first marketing hires and set up the fundamentals.
+  The repositioning they helped with is part of how we got acquired."
 - _Themes others consistently name:_ technical credibility with engineers, willingness to be told no and come
-  back with data, makes other people better.
+  back with data, makes ottheir people better.
 
 ## Warm network
-- **Devon Ruiz** — VP Sales, Cipherworks. Manager-adjacent, would vouch loudly. → **Hot. Would refer.**
-- **Sam Whitfield** — CPO, now at a Series B security startup. Former boss. → **Hot. Would refer.**
-- **Lena Ostrowski** — Senior PMM at a large security vendor. Met at a conference, stayed in touch. → **Warm.**
-- **Ray Delgado** — Sales Engineer, Northwind → now at a target company. → **Warm. Worth a coffee.**
+- **Devon Sample** — VP Sales, Cipherworks. Manager-adjacent, would vouch loudly. → **Hot. Would refer.**
+- **Sam Example** — CPO, now at a Series B security startup. Former boss. → **Hot. Would refer.**
+- **Lena Placeholder** — Senior PMM at a large security vendor. Met at a conference, stayed in touch. → **Warm.**
+- **Ray Demo** — Sales Engineer, Northwind → now at a target company. → **Warm. Worth a coffee.**
 
 ---
 
