@@ -16,6 +16,32 @@ The finding worth keeping, because it will recur for anyone naming in this marke
 
 **Where we differ (lean in):** local-first/privacy (they're SaaS you upload your comp to), the whole-arc system vs. an assess-and-upsell funnel, no-fabrication traceability, runs on your existing Claude sub vs. a $9–149 ladder, and a real job pipeline + tracker (which they lack).
 
+## Closest analog — SearchSteward (reviewed 2026-07-20)
+**[searchsteward.com](https://searchsteward.com/)** — *"A job radar for the companies you actually want."* $19/mo (free tier: 25 companies, 50 scored matches, 10 AI evals). Built by a laid-off fintech professional using Claude, same as this project; [written up on r/ClaudeAI](https://www.reddit.com/r/ClaudeAI/comments/1uyky9u/). Hosted SaaS (React/TS + FastAPI + Postgres), US-only.
+
+**The convergence is the headline.** Two people, independently, arrived at the same architecture — which is strong validation that these choices are right, not idiosyncratic:
+- **Refuses to auto-apply**, explicitly ("We will never auto-apply for you"), for the same reason: auto-applied volume gets auto-rejected.
+- **Deterministic scoring, not an LLM ranker.** Two-stage: hard gates (location/work-type, title exclusions, clearance, staleness) then weighted scoring (title match, required/preferred keywords, exact-title bonus, negative-keyword penalties, seniority multiplier). Their stated reason — *"I didn't want a black box deciding what you never see"* — is our "Why it scored" drawer in different words.
+- **ATS-direct, avoids aggregators.** 40+ ATS platforms; they skip LinkedIn entirely to dodge the noise.
+- Nice refinement worth copying: **sparse job descriptions drag the *confidence*, not the verdict** (~15%), so a title-only stub can't masquerade as a confident match.
+
+**Their public benchmark: 104 applications → 23 screens (22%) → 13 interviews.** That is the number to beat, and it was achieved with *manual* applications off ATS-direct sourcing — i.e. this method demonstrably works.
+
+**What they have that we don't (ranked by value):**
+1. **Outcomes analytics** — response rate by score band, résumé-version performance, referral effectiveness, whether applying within 48 hours matters, and which JD keywords correlate with reaching a screen. This closes the loop from "we scored it" to "the score predicted reality." Our biggest gap.
+2. **Gmail + Calendar sync** — the pipeline updates itself instead of requiring manual status changes.
+3. **Ghost-job / scam detector** (free tool) — we validate freshness but don't name-and-shame ghost postings.
+4. **Zero setup, multi-device** — hosted beats our ~1-hour local setup for non-technical users. Structural, and we accept it.
+
+**Where we differ (lean in):**
+- **They have no coaching layer at all** — no self-assessment, positioning, roadmap, interview prep, or first-90-days. They confirm interview prep is absent. They are a *search-and-track* system; we're a *career* system. This is the widest gap in our favour.
+- **Local-first.** Their résumé lives on their servers (they promise never to sell it; still a server). Ours never leaves the machine.
+- **No-fabrication traceability.** Their tailoring is "ATS-optimized" prompting, which the founder candidly says "works, but could be better." We trace every claim to the profile and flag `[NEED METRIC]` rather than inventing.
+- **Warm-path routing.** They *measure* referral effectiveness; we *route* senior roles through referrals first.
+- Free and AGPL vs $19/mo closed source.
+
+_Also noted in that thread: **[career-ops](https://github.com/santifer/career-ops)** (OSS, CLI, AI-heavy — closer to us in spirit, but token-hungry and command-line only), plus bypass.uno and jobs.myrlin.io (auto-apply, waitlisted)._
+
 ## The market, in five categories
 Almost every competitor is a **point tool** — it does one job well and stops. Bellows spans the whole arc, on your own machine.
 
@@ -70,7 +96,9 @@ Six things the market can't match — grounded in the research above:
 
 **Shipped 2026-07-19** (from the CareerForge AI review): standalone résumé-health score (`engine/resume_score.py`), automation-exposure coaching lens (`career-coach`), and résumé age-proofing (`resume-tailor`). Next: surface the résumé-health score and the automation-exposure read **in the Hub** (currently CLI + skill only) so the value is visible without the terminal.
 
-Ranked by value / fit with our principles:
+Ranked by value / fit with our principles. **#1 was promoted to the top after the SearchSteward review (2026-07-20)** — it's the one gap a direct competitor has already proven valuable, and without it the scoring rubric can never be validated against reality:
+
+0. **Outcomes analytics — the feedback loop.** Response rate by score band, résumé-version performance, referral lift, whether applying within 48 hours matters, and which JD keywords correlate with reaching a screen. Right now a score of 8 is an *assertion*; with this it becomes a *prediction that can be checked*, and the weights can be tuned from evidence instead of intuition. Needs one new field (date applied, already implicit) plus a response/outcome status, then a panel on the Hub. Highest-value item on this list.
 
 1. **Human-in-the-loop autofill.** Simplify's killer feature is form-autofill on Workday/Greenhouse/Lever/Ashby (~85–90% accuracy). We refuse to *auto-submit* — but a browser helper that **fills the form and lets you review + press send** saves the tedium without crossing our line. High value, on-brand.
 2. **Deeper ATS keyword scoring.** Rezi/Jobscan do section-by-section keyword density + hard/soft-skill coverage. We have `ats_match.py` (basic, now surfaced as the ATS % chip) — deepen it into a per-section coverage report in the tailoring step.
