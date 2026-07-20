@@ -41,6 +41,7 @@ risk so you fix the spec, not the generated file.
 import json
 import re
 import sys
+from itertools import pairwise
 
 import docx
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
@@ -56,6 +57,40 @@ PAGE_USABLE_IN = 7.3  # 8.5" Letter minus 0.6" left + 0.6" right margins
 # ---- validation against the ATS import rules (resume-style-rules.md §9) ----
 _TITLE_BAD = re.compile(r"[,/]| - ")  # comma, slash, or spaced hyphen truncates titles
 _LOC_OK = re.compile(r"^.+,\s*[A-Z]{2}\s*\|\s*.+$")  # "City, ST | dates"
+
+_MONTHS = {
+    m: i
+    for i, m in enumerate(
+        (
+            "january february march april may june july august september october november december"
+        ).split(),
+        start=1,
+    )
+}
+
+
+def _end_key(location_dates):
+    """A sortable (year, month) key for the END of a role's date range, or None if
+    unparseable. 'Present' sorts as most-recent. Reads the text after the last '|'
+    and the right side of the en-dash: 'City, ST | May 2019 – June 2022' -> (2022, 6)."""
+    seg = str(location_dates or "").split("|")[-1]
+    end = re.split(r"\s[–—-]\s", seg)[-1].strip()  # right of the date-range dash
+    if not end:
+        return None
+    if "present" in end.lower():
+        return (9999, 99)  # current role — most recent
+    m = re.search(r"([A-Za-z]+)\s+(\d{4})", end)  # "June 2022"
+    if m:
+        return (int(m.group(2)), _MONTHS.get(m.group(1).lower(), 0))
+    y = re.search(r"\b(\d{4})\b", end)  # bare year fallback
+    return (int(y.group(1)), 0) if y else None
+
+
+def _entry_end(entry):
+    """The most-recent end date across an experience entry's role(s)."""
+    roles = entry.get("roles") or [entry]
+    keys = [k for k in (_end_key(r.get("location_dates")) for r in roles) if k]
+    return max(keys) if keys else None
 
 
 def _all_roles(spec):
@@ -82,6 +117,31 @@ def validate(spec):
             warns.append(f"location/date line is not 'City, ST | dates': {ld!r}")
     for m in sorted(scan_placeholders(spec)):
         warns.append(f"unresolved placeholder in spec text: {m!r}")
+
+    # Reverse-chronological order: each experience entry must be at least as recent
+    # as the one after it, and stacked sub-roles must descend within an employer.
+    experience = spec.get("experience", [])
+    prev_co, prev_end = None, None
+    for e in experience:
+        end = _entry_end(e)
+        co = e.get("company", "?")
+        if prev_end is not None and end is not None and end > prev_end:
+            warns.append(
+                f"experience is out of reverse-chronological order: {co!r} is more "
+                f"recent than {prev_co!r} but is listed after it"
+            )
+        prev_co, prev_end = co, end
+    for e in experience:
+        roles = e.get("roles")
+        if roles:
+            keys = [_end_key(r.get("location_dates")) for r in roles]
+            for a, b in pairwise(keys):
+                if a is not None and b is not None and b > a:
+                    warns.append(
+                        f"stacked roles under {e.get('company', '?')!r} are out of "
+                        f"reverse-chronological order"
+                    )
+                    break
     return warns
 
 

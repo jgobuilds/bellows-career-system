@@ -56,11 +56,11 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 # Not-yet-typed modules (the strict-mypy ratchet backlog). Typed so far:
-# jobkey, docx_common, pipeline_store. Remove a name here when you annotate it.
+# jobkey, docx_common, pipeline_store, resume_score, ats_url, config, add_job,
+# add_jobs_batch, build_demo, jobspy_sweep, test_links. Remove a name when you annotate it.
 module = [
-    "add_job", "add_jobs_batch", "triage_leads", "lead_score", "ats_match",
-    "ats_sweep", "jobspy_sweep", "resume_builder", "cover_builder",
-    "build_application", "docx_finalize", "build_demo", "server", "config", "test_links",
+    "triage_leads", "lead_score", "ats_match", "ats_sweep",
+    "resume_builder", "cover_builder", "build_application", "docx_finalize", "server",
 ]
 disallow_untyped_defs = false
 disallow_incomplete_defs = false

@@ -48,7 +48,7 @@ APPLICATIONS_DIR = os.path.join(_PERSONAL, "applications")
 
 
 # ---- helper: turns the plain words in userconfig into matching rules. --------
-def terms_to_regex(terms):
+def terms_to_regex(terms: list[str]) -> "re.Pattern[str]":
     """['data governance', 'ai coe'] -> compiled word-boundary regex, case-insensitive.
 
     A space in your term matches any run of spaces/hyphens/dashes, so the term

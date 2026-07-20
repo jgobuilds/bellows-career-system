@@ -60,5 +60,76 @@ class TestResumeValidate(unittest.TestCase):
         self.assertTrue(any("placeholder" in x for x in w), w)
 
 
+class TestReverseChronology(unittest.TestCase):
+    def _job(self, company, dates):
+        return {
+            "company": company,
+            "title": "Director of Data",
+            "location_dates": dates,
+            "bullets": [],
+        }
+
+    def test_correct_order_is_clean(self):
+        spec = {
+            "experience": [
+                self._job("Optimum", "City, ST | April 2024 – Present"),
+                self._job("Consulting", "City, ST | September 2023 – April 2026"),
+                self._job("Upright", "City, ST | June 2022 – September 2023"),
+                self._job("Hartford", "City, ST | May 2019 – June 2022"),
+            ]
+        }
+        self.assertEqual([w for w in resume_builder.validate(spec) if "chronological" in w], [])
+
+    def test_out_of_order_entry_warns(self):
+        # Hartford (2022) placed above Consulting (2026) — the exact bug we hit
+        spec = {
+            "experience": [
+                self._job("Optimum", "City, ST | April 2024 – Present"),
+                self._job("Hartford", "City, ST | May 2019 – June 2022"),
+                self._job("Consulting", "City, ST | September 2023 – April 2026"),
+            ]
+        }
+        w = [x for x in resume_builder.validate(spec) if "reverse-chronological" in x]
+        self.assertTrue(w, "expected an out-of-order warning")
+        self.assertIn("Consulting", w[0])
+
+    def test_present_sorts_as_most_recent(self):
+        # a 'Present' role listed AFTER an ended one is out of order
+        spec = {
+            "experience": [
+                self._job("Old", "City, ST | May 2019 – June 2022"),
+                self._job("Current", "City, ST | April 2024 – Present"),
+            ]
+        }
+        self.assertTrue(any("reverse-chronological" in x for x in resume_builder.validate(spec)))
+
+    def test_stacked_subroles_must_descend(self):
+        spec = {
+            "experience": [
+                {
+                    "company": "BigCo",
+                    "roles": [
+                        {
+                            "title": "Analyst",
+                            "location_dates": "City, ST | 2016 – 2019",
+                            "bullets": [],
+                        },
+                        {
+                            "title": "Director",
+                            "location_dates": "City, ST | 2019 – 2022",
+                            "bullets": [],
+                        },
+                    ],
+                }
+            ]
+        }
+        self.assertTrue(any("stacked roles" in x for x in resume_builder.validate(spec)))
+
+    def test_end_key_parses_formats(self):
+        self.assertEqual(resume_builder._end_key("City, ST | May 2019 – June 2022"), (2022, 6))
+        self.assertEqual(resume_builder._end_key("City, ST | 2024 – Present"), (9999, 99))
+        self.assertEqual(resume_builder._end_key("City, ST | 2020 - 2024"), (2024, 0))
+
+
 if __name__ == "__main__":
     unittest.main()

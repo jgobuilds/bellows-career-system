@@ -93,7 +93,7 @@ CSV_COLS = [
 ]
 
 
-def run_jobspy(args):
+def run_jobspy(args: argparse.Namespace) -> "list[dict]":
     """Optional board-recall leg. Returns a list of row dicts (empty if unavailable)."""
     try:
         import pandas as pd
