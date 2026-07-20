@@ -35,7 +35,7 @@
 _Real samples. This is the part that matters._
 
 ### Sample 1 — Slack message to a skeptical sales director
-> Fair pushback, and I'd rattheir test it than argue about it. Give me two weeks and an A/B test on the new
+> Fair pushback, and I'd rather test it than argue about it. Give me two weeks and an A/B test on the new
 > landing page. If signups don't move, we put the old hero line back and I'll say so myself. If they do move,
 > we stop having this conversation. Deal?
 

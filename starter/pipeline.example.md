@@ -28,7 +28,7 @@ _Last updated: 2026-03-04_
 - **Lead with:** the landing-page rewrite (signups +14 pts), the competitive one-pagers sales still uses, the
   product launch they coordinated end-to-end, and technical credibility with engineers.
 - **Honest gaps to prep:** running a briefing cadence solo; they've supported briefings but never owned the
-  calendar — own that plainly rattheir than blurring it.
+  calendar — own that plainly rather than blurring it.
 - **Route:** ◆ **WARM FIRST.** Lena Placeholder is a senior PMM in this space and knows the hiring manager.
   Reach them before applying. A referral here is worth more than any resume edit.
 - **Documents:** personal/applications/sentinel-security/
@@ -37,5 +37,5 @@ _Last updated: 2026-03-04_
 - **Why 4, and why you should skip it:** this is the failure mode the system exists to prevent. The title,
   the level, the comp, and "remote" all look right, and a keyword scorer would rank it highly. But the actual
   job is consumer DTC brand and paid media — a discipline Johnny's profile explicitly names as a **hard gate**.
-  Applying means eittheir a wasted application or a resume that implies experience they don't have. Skip it,
+  Applying means either a wasted application or a resume that implies experience they don't have. Skip it,
   and feel good about the time saved.
