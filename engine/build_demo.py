@@ -254,7 +254,7 @@ window.__DEMO__ = %s;
 """ % json.dumps(DEMO, ensure_ascii=False)
 
 
-def main():
+def main() -> None:
     html = open(SRC, encoding="utf-8").read()
     # 1) drop external Google Fonts links (self-contained; fall back to system fonts)
     html = re.sub(r"\s*<link[^>]*fonts\.g[^>]*>", "", html)

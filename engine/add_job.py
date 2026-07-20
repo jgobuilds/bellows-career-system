@@ -50,7 +50,7 @@ from pipeline_store import (  # noqa: F401 - back-compat re-exports
 insert_pipeline = store.insert_job  # old name kept for callers
 
 
-def _resolve(p):
+def _resolve(p: str) -> str:
     """Accept an absolute path, a cwd-relative path, or a repo-root-relative one."""
     if os.path.isabs(p) or os.path.exists(p):
         return p
@@ -58,7 +58,7 @@ def _resolve(p):
     return cand if os.path.exists(cand) else p
 
 
-def main():
+def main() -> None:
     if len(sys.argv) != 2:
         sys.exit("usage: python add_job.py <job.json>")
     job = json.load(open(_resolve(sys.argv[1]), encoding="utf-8"))

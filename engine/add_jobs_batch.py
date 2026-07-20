@@ -32,7 +32,7 @@ REQUIRED_REC = ("role", "co", "score", "status")
 REQUIRED_PL = ("why_short", "flags", "date_added", "detail_block")
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "worksheet",

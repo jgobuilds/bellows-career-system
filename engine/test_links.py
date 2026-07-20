@@ -31,7 +31,7 @@ PORT = int(os.environ.get("TEST_LINKS_PORT", "8799"))
 BASE = f"http://127.0.0.1:{PORT}"
 
 
-def _get(path):
+def _get(path: str) -> "tuple[int | None, bytes]":
     """(status, body_bytes). status is None on a connection error (body = reason).
     Retries once on a transient connection error so rapid sequential requests to
     the threaded dev server don't flake the result."""
@@ -48,7 +48,7 @@ def _get(path):
     return last
 
 
-def main():
+def main() -> int:
     env = dict(os.environ, SWEEP_PORT=str(PORT), BELLOWS_NO_BROWSER="1")
     proc = subprocess.Popen(
         [sys.executable, os.path.join(_ROOT, "engine", "server.py")],
