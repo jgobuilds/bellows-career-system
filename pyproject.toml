@@ -1,0 +1,76 @@
+# Quality-gate config for Bellows (config only — packaging itself is deferred
+# to the H2 refactor in .engineering-standard/review-2026-07-19.md). Tools read [tool.*] from here.
+# Philosophy (engineering-standard): strict on real defects, quiet on style the
+# formatter settles. The ruleset is a RATCHET — start green, widen over time.
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["engine", "."]     # first-party roots, so isort groups our modules correctly
+extend-exclude = ["personal", "starter/hub-demo.example.html", ".engineering-standard"]
+
+[tool.ruff.lint]
+# Enabled: correctness + likely-bug + modernize + import-order + security families.
+select = ["E", "W", "F", "B", "C4", "UP", "RUF", "I", "S"]
+# Ratchet queue (turn on one at a time, fixing findings in the same PR): ruff format.
+ignore = [
+    "E501",                       # long lines — hand-wrapped docstrings/prose, not enforced
+    "E402",                       # import-not-at-top — the intentional `import _paths` bootstrap (engine/_paths.py)
+    "E702",                       # multiple statements on a line — style; ratchet
+    "RUF001", "RUF002", "RUF003", # "ambiguous" unicode — intentional (— dashes, ≥, ✅ in prose/output)
+    "UP031",                      # %-format — a couple of regex/label builders
+    "B007",                       # unused loop var — a few intentional throwaways
+    # bandit: by-design for a LOCAL, single-user tool (not a network service):
+    "S603",                       # subprocess with list args (never shell=True) — running local CLIs/python/Word
+    "S607",                       # partial exe path ("powershell") — standard system binary on Windows
+    "S310",                       # urlopen of constructed https/localhost URLs — no user-supplied schemes
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]             # asserts are the point in tests
+
+[tool.ruff.format]
+# Enforced. `ruff format` is the canonical formatter (black-compatible); CI runs
+# `ruff format --check` and pre-commit runs `ruff-format`. Defaults are fine.
+
+[tool.mypy]
+# Gating. mypy_path teaches it the flat run-as-script layout (H2), so first-party
+# imports resolve. disallow_untyped_defs is ON — but ratcheted per module: the
+# fully-typed core enforces it; everything else is exempted below and typed one
+# module at a time (remove it from the override list as you annotate it).
+python_version = "3.10"
+mypy_path = ["engine", ".", "personal"]   # flat layout: engine/ siblings, config.py at root, userconfig in personal/
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# personal/userconfig.py is the USER's config (gitignored, scaffolded from the
+# template) — resolve its names for the config star-import, but it isn't our code
+# to type-check, so don't gate on placeholder empties like `HARD_GATES = []`.
+module = ["userconfig"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# Not-yet-typed modules (the strict-mypy ratchet backlog). Typed so far:
+# jobkey, docx_common, pipeline_store. Remove a name here when you annotate it.
+module = [
+    "add_job", "add_jobs_batch", "triage_leads", "lead_score", "ats_match",
+    "ats_sweep", "jobspy_sweep", "resume_builder", "cover_builder",
+    "build_application", "docx_finalize", "build_demo", "server", "config", "test_links",
+]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+# The suite is stdlib unittest; pytest discovers it. `python -m unittest discover
+# -s tests` also works with no pytest installed.
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true

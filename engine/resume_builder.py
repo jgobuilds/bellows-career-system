@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""
+resume_builder.py — render an ATS-clean resume .docx from a JSON spec.
+
+The FORMAT rules (the ones learned the hard way from real ATS imports — see
+resume-style-rules.md) live here, once. Each application supplies only its
+CONTENT as a JSON spec; this builder guarantees the parse-safe layout every time:
+no tables, single column, "City, ST | dates" location lines, punctuation-free job
+titles, bold sentence-case bullet lead-ins, plain competency lines.
+
+USAGE
+  python engine/resume_builder.py <spec.json> <out.docx>
+  # or:  from engine.resume_builder import build_resume; build_resume(spec, out)
+
+Then run docx_finalize.py on the output to scrub metadata, and render a PDF.
+build_application.py does the whole chain (build -> finalize -> PDF) in one call.
+
+SPEC SHAPE (see personal/applications/<company>/resume.json for a live example):
+  {
+    "name": "Firstname Lastname, M.S.",
+    "contact": "City, ST  |  email  |  phone  |  linkedin",
+    "summary": "one paragraph",
+    "competencies": ["A | B | C", "D | E | F"],          # plain lines, never a table
+    "skills": [["Cloud & Warehouse:  ", "Snowflake, ..."]],
+    "experience": [
+      {"company": "...", "title": "...",                 # title: NO comma/slash/hyphen
+       "location_dates": "City, ST | Month Year - Month Year",
+       "bullets": [["bold lead-in", " rest of the bullet."]]}
+    ],
+    "earlier": [{"company": "...", "title": "...", "location_dates": "..."}],
+    "education": [["Master of Science, Business Analytics", " - State University University (2018)"]],
+    "certs": "Prior Certifications: ..."
+  }
+
+The builder VALIDATES the spec against the import rules and prints warnings for
+anything that would parse badly (punctuation in a title, a malformed location
+line, a leftover placeholder). Warnings do not block the build — they surface the
+risk so you fix the spec, not the generated file.
+"""
+
+import json
+import re
+import sys
+
+import docx
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Pt
+
+from docx_common import BODY_FONT, BRAND_BLUE, scan_placeholders
+from docx_common import run as _run
+
+PAGE_USABLE_IN = 7.3  # 8.5" Letter minus 0.6" left + 0.6" right margins
+
+# ---- validation against the ATS import rules (resume-style-rules.md §9) ----
+_TITLE_BAD = re.compile(r"[,/]| - ")  # comma, slash, or spaced hyphen truncates titles
+_LOC_OK = re.compile(r"^.+,\s*[A-Z]{2}\s*\|\s*.+$")  # "City, ST | dates"
+
+
+def _all_roles(spec):
+    """Flatten experience entries — including stacked sub-roles under one employer —
+    plus earlier roles, for validation."""
+    roles: list[dict] = []
+    for e in spec.get("experience", []):
+        roles.extend(e["roles"] if e.get("roles") else [e])
+    roles.extend(spec.get("earlier", []))
+    return roles
+
+
+def validate(spec):
+    warns = []
+    for role in _all_roles(spec):
+        t = role.get("title", "")
+        if _TITLE_BAD.search(t):
+            warns.append(
+                f"title has punctuation that can truncate on import: {t!r} "
+                f"(join with 'and', drop the comma/slash/hyphen)"
+            )
+        ld = role.get("location_dates", "")
+        if not _LOC_OK.match(ld):
+            warns.append(f"location/date line is not 'City, ST | dates': {ld!r}")
+    for m in sorted(scan_placeholders(spec)):
+        warns.append(f"unresolved placeholder in spec text: {m!r}")
+    return warns
+
+
+# ---- rendering helpers ----------------------------------------------------------
+def _setup(d):
+    for s in d.sections:
+        s.top_margin = s.bottom_margin = Inches(0.5)
+        s.left_margin = s.right_margin = Inches(0.6)
+    st = d.styles["Normal"]
+    st.font.name = BODY_FONT
+    st.font.size = Pt(10.5)
+    st.paragraph_format.space_after = Pt(0)
+    st.paragraph_format.space_before = Pt(0)
+    st.paragraph_format.line_spacing = 1.0
+
+
+def _para(d, before=0, after=0, align=None):
+    p = d.add_paragraph()
+    p.paragraph_format.space_before = Pt(before)
+    p.paragraph_format.space_after = Pt(after)
+    if align:
+        p.alignment = align
+    return p
+
+
+def _section(d, text):
+    p = _para(d, before=9, after=2)
+    _run(p, text, bold=True, size=12, color=BRAND_BLUE)
+    pPr = p._p.get_or_add_pPr()
+    pbdr = OxmlElement("w:pBdr")
+    bottom = OxmlElement("w:bottom")
+    for k, v in (("w:val", "single"), ("w:sz", "6"), ("w:space", "1"), ("w:color", "0072B2")):
+        bottom.set(qn(k), v)
+    pbdr.append(bottom)
+    pPr.append(pbdr)
+
+
+def _bullet(d, lead, rest):
+    p = _para(d, before=1, after=1)
+    p.paragraph_format.left_indent = Inches(0.18)
+    p.paragraph_format.first_line_indent = Inches(-0.18)
+    _run(p, "•  ")
+    _run(p, lead, bold=True)
+    _run(p, rest)
+
+
+def _plain_bullet(d, text):
+    """Understated bullet (no bold lead-in) — used for earlier/older roles."""
+    p = _para(d, before=1, after=1)
+    p.paragraph_format.left_indent = Inches(0.18)
+    p.paragraph_format.first_line_indent = Inches(-0.18)
+    _run(p, "•  ")
+    _run(p, text)
+
+
+def _competencies(d, comp_lines, columns=2):
+    """Render competencies as tab-stop-aligned columns so they line up cleanly.
+
+    Accepts either a flat list of items or the older `"A | B | C"` line format —
+    any '|' is split out — so items always align regardless of how the spec is
+    written. Tabs are plain whitespace in the text stream, so this stays ATS-safe
+    (unlike a real table, which is why we don't use one)."""
+    items: list[str] = []
+    for line in comp_lines:
+        items.extend(x.strip() for x in line.split("|") if x.strip())
+    colw = PAGE_USABLE_IN / columns
+    for i in range(0, len(items), columns):
+        row = items[i : i + columns]
+        p = _para(d, before=2)
+        stops = p.paragraph_format.tab_stops
+        for c in range(1, columns):
+            stops.add_tab_stop(Inches(round(colw * c, 3)), WD_TAB_ALIGNMENT.LEFT)
+        _run(p, "\t".join(row))
+
+
+def build_resume(spec, out_path):
+    """Render the spec to out_path. Returns the list of validation warnings."""
+    warns = validate(spec)
+    d = docx.Document()
+    _setup(d)
+
+    # Header
+    p = _para(d, after=1, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _run(p, spec["name"], bold=True, size=19, color=BRAND_BLUE)
+    p = _para(d, after=2, align=WD_ALIGN_PARAGRAPH.CENTER)
+    _run(p, spec["contact"], size=10)
+
+    # Summary
+    _section(d, "Professional Summary")
+    p = _para(d, before=2)
+    _run(p, spec["summary"])
+
+    # Core Competencies (tab-aligned columns — NOT a table)
+    if spec.get("competencies"):
+        _section(d, "Core Competencies")
+        _competencies(d, spec["competencies"], spec.get("competency_columns", 2))
+
+    # Technical Skills
+    if spec.get("skills"):
+        _section(d, "Technical Skills")
+        for label, rest in spec["skills"]:
+            p = _para(d, before=1)
+            _run(p, label, bold=True)
+            _run(p, rest)
+
+    # Professional Experience.
+    # An entry is either a single role {company, title, location_dates, bullets}
+    # or one employer with stacked sub-roles {company, roles: [{title, location_dates,
+    # bullets}, ...]} — the latter shows promotion history under one company header.
+    _section(d, "Professional Experience")
+
+    def _role_block(title, location_dates, bullets, before):
+        _run(_para(d, before=before), title, bold=True)
+        _run(_para(d, after=1), location_dates)
+        for lead, rest in bullets:
+            _bullet(d, lead, rest)
+
+    for entry in spec["experience"]:
+        _run(_para(d, before=6), entry["company"], bold=True, size=11)
+        if entry.get("roles"):
+            for i, r in enumerate(entry["roles"]):
+                _role_block(r["title"], r["location_dates"], r["bullets"], before=3 if i else 0)
+        else:
+            _role_block(entry["title"], entry["location_dates"], entry["bullets"], before=0)
+
+    # Earlier Experience (optional one-line bullet per role)
+    if spec.get("earlier"):
+        _section(d, "Earlier Experience")
+        for role in spec["earlier"]:
+            _run(_para(d, before=4), role["company"], bold=True)
+            _run(_para(d), role["title"])
+            _run(_para(d), role["location_dates"])
+            if role.get("bullet"):
+                _plain_bullet(d, role["bullet"])
+
+    # Education & Certifications
+    if spec.get("education") or spec.get("certs"):
+        _section(d, "Education & Certifications")
+        for i, (bold_part, rest) in enumerate(spec.get("education", [])):
+            p = _para(d, before=2 if i == 0 else 0)
+            _run(p, bold_part, bold=True)
+            _run(p, rest)
+        if spec.get("certs"):
+            label, _, rest = spec["certs"].partition(":")
+            p = _para(d)
+            _run(p, label + ":", bold=True)
+            _run(p, rest)
+
+    d.save(out_path)
+    return warns
+
+
+def main():
+    if len(sys.argv) != 3:
+        sys.exit("usage: python resume_builder.py <spec.json> <out.docx>")
+    spec = json.load(open(sys.argv[1], encoding="utf-8"))
+    warns = build_resume(spec, sys.argv[2])
+    print(f"built {sys.argv[2]}  (tables: 0)")
+    if warns:
+        print("\n  ⚠ spec warnings (fix the spec, not the docx):")
+        for w in warns:
+            print("   -", w)
+    else:
+        print("  ✓ spec passes ATS import checks")
+
+
+if __name__ == "__main__":
+    main()

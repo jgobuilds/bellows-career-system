@@ -1,0 +1,23 @@
+# Local quality gate — runs before every commit so problems never reach CI.
+# Install once per clone:  pre-commit install
+# (mypy runs in CI, not here — it needs the project deps + scaffolded config that
+#  pre-commit's isolated envs don't have.)
+minimum_pre_commit_version: "3.5.0"
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: detect-private-key        # stop committed secrets early
+      - id: check-yaml
+      - id: check-toml
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff                       # lint against pyproject.toml's [tool.ruff]
+        args: [--fix]
+      - id: ruff-format                # format (black-compatible)

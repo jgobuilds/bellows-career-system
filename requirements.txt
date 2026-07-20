@@ -1,0 +1,15 @@
+# Bellows runtime dependencies.
+#   pip install -r requirements.txt
+#
+# The ATS-direct sweep, the local server, and the pipeline tools are stdlib-only;
+# these cover document generation and the job-board sweep.
+
+python-docx>=1.1          # resume/cover .docx rendering + reading (resume_builder, cover_builder, ats_match)
+python-jobspy>=1.1        # multi-board sweep (jobspy_sweep); ATS-direct sweep needs no deps
+
+# Optional, Windows only: faster .docx -> PDF via Word. build_application.py falls
+# back to a PowerShell + Word invocation when this isn't installed, so it's not required.
+#   pip install pywin32
+#
+# Tests use the standard library only (no pytest needed):
+#   python -m unittest discover -s tests

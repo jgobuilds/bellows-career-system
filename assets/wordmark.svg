@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="387" height="126" viewBox="0 0 387 126" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Bellows">
+  <title>Bellows</title>
+  <text xml:space="preserve" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16" font-weight="700" fill="#E69F00">
+    <tspan x="10" y="24">    ____       ____</tspan>
+    <tspan x="10" y="41">   / __ )___  / / /___ _      _______</tspan>
+    <tspan x="10" y="58">  / __  / _ \/ / / __ \ | /| / / ___/</tspan>
+    <tspan x="10" y="75"> / /_/ /  __/ / / /_/ / |/ |/ (__  )</tspan>
+    <tspan x="10" y="92">/_____/\___/_/_/\____/|__/|__/____/</tspan>
+  </text>
+  <text x="12" y="116" font-family="'Manrope','Segoe UI',system-ui,sans-serif" font-size="12.5" font-style="italic" font-weight="600" fill="#0072B2">It doesn't make the fire. It makes yours hotter.</text>
+</svg>

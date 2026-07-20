@@ -1,0 +1,6 @@
+# Dev/CI tools (the quality gate). Runtime deps are in requirements.txt.
+#   pip install -r requirements-dev.txt
+ruff>=0.6            # lint + format (config in pyproject.toml [tool.ruff])
+mypy>=1.8            # type check — informational until the engine is packaged (H2)
+pre-commit>=3.5      # local git hooks (.pre-commit-config.yaml)
+# Tests are stdlib unittest (no pytest needed): python -m unittest discover -s tests

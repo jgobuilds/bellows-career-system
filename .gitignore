@@ -1,0 +1,31 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Microsoft Office lock & owner temp files
+~$*
+.~lock.*#
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+
+# Rendered document previews (regenerated on demand)
+*.jpg
+*.jpeg
+
+# PERSONAL — everything private lives in ONE folder, gitignored: userconfig.py,
+# career-profile.md, applications/, reconnect-list.md, references.md, coaching outputs,
+# and data/ (pipeline, jobs, leads). Lock it down and back it up OUTSIDE git.
+personal/
+
+# Build output — the repo IS the shareable product now; there is no build step.
+dist/
+
+# engineering-standard: transient lint output (profile.md is committed)
+.engineering-standard/findings.json
+
+# tool caches
+.mypy_cache/
+.ruff_cache/
