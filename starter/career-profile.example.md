@@ -27,7 +27,7 @@
 - **The throughline:** I turn complex technical products into stories that a skeptical buyer will act on.
 - **Differentiator:** I'll take on pricing and packaging when most PMMs at my level won't. I've owned the
   launch content and competitive framing for two packaging updates, one of which moved landing-page signups
-  31%→45%. That comfort with the hardest part of the story is what sets me apart from ottheir mid-level PMMs.
+  31%→45%. That comfort with the hardest part of the story is what sets me apart from other mid-level PMMs.
 - **Operating philosophy:** I work as a force multiplier for the GTM team. Sales shouldn't have to invent
   the story on the fly — my job is to give them the narrative, the proof, and the objection-handling so they
   can move faster, and then get out of the way.
@@ -55,7 +55,7 @@ _A developer-first API security platform; Series C, ~400 employees._
   - Rewrote the platform's positioning and landing page around a usage-based packaging change: **signups up
     from 31% to 45%** of qualified visitors over three quarters, measured against the pre-launch baseline.
   - Built the competitive content against 4 named rivals — battlecards and an objection-handling one-pager
-    that sales still opens more than any ottheir asset in Highspot.
+    that sales still opens more than any other asset in Highspot.
   - Coordinated the content and enablement for the platform's largest release, working across Product, Sales,
     Support, and Docs over 6 weeks. **1,400 signups in week one**, 3× the prior launch record.
   - Supported the analyst briefings for two release cycles (prep docs, demo scripts) — supported, not owned.
@@ -105,7 +105,7 @@ _A mid-market ERP vendor; ~1,200 employees._
 - **Sam Example** (CPO, Northwind): "They were one of our first marketing hires and set up the fundamentals.
   The repositioning they helped with is part of how we got acquired."
 - _Themes others consistently name:_ technical credibility with engineers, willingness to be told no and come
-  back with data, makes ottheir people better.
+  back with data, makes other people better.
 
 ## Warm network
 - **Devon Sample** — VP Sales, Cipherworks. Manager-adjacent, would vouch loudly. → **Hot. Would refer.**
