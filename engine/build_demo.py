@@ -2,7 +2,7 @@
 """build_demo.py — generate a self-contained, server-free demo of the Career Hub.
 
 Reads engine/hub.html and writes starter/hub-demo.example.html: the exact same UI,
-but with fictional example data (Maya Okonkwo) baked in and a fetch() shim so every
+but with fictional example data (Johnny Fakeuser) baked in and a fetch() shim so every
 /api/* call is answered locally. No server, no network, no personal data — open the
 file straight from disk and the kanban, drawer, filters, and drag-to-status all work.
 
@@ -18,7 +18,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(_ROOT, "engine", "hub.html")
 OUT = os.path.join(_ROOT, "starter", "hub-demo.example.html")
 
-# --- Fictional demo data (matches starter/pipeline.example.md — Maya Okonkwo) ---
+# --- Fictional demo data (matches starter/pipeline.example.md — Johnny Fakeuser) ---
 JOBS = [
     {
         "id": 1,
@@ -27,7 +27,7 @@ JOBS = [
         "score": 8,
         "tier": "mid",
         "warm": True,
-        "warmContact": "Lena Ostrowski",
+        "warmContact": "Lena Placeholder",
         "fit": "core",
         "ats": 88,
         "status": "tailored",
@@ -36,9 +36,9 @@ JOBS = [
         "notes": "Lena introduced me to the hiring manager — call Thursday.",
         "why": (
             "Near one-for-one: technical/security buyer, positioning and launch content named a "
-            "top-three priority (her landing-page rewrite that lifted signups 31%->45% lands), "
+            "top-three priority (their landing-page rewrite that lifted signups 31%->45% lands), "
             "competitive one-pagers, remote, and a clean step up in scope. Gap: they want someone "
-            "who's owned an analyst-briefing cadence; she's supported briefings, not run them — own "
+            "who's owned an analyst-briefing cadence; they've supported briefings, not run them — own "
             "that plainly."
         ),
     },
@@ -55,9 +55,9 @@ JOBS = [
         "url": "#",
         "tags": ["PMM", "Dev Tools", "0→1", "Remote", "$115–140K"],
         "why": (
-            "Real 0->1 build as a dev-tools company's first PMM, remote, and her Northwind launch "
+            "Real 0->1 build as a dev-tools company's first PMM, remote, and their Northwind launch "
             "story fits. Gap: it's a solo role with no team and the JD leans ~40% demand gen — a lane "
-            "she explicitly doesn't have; worth it only if she'd take the demand-gen half."
+            "they explicitly don't have; worth it only if they'd take the demand-gen half."
         ),
     },
     {
@@ -75,7 +75,7 @@ JOBS = [
         "why": (
             "Honest recommendation: skip. Title, level, comp, and 'remote' all look right, so keyword "
             "triage liked it. Gap: the core is consumer DTC brand + paid-media buying, a stated hard gate "
-            "in her profile — no framing bridges it. Don't apply."
+            "in their profile — no framing bridges it. Don't apply."
         ),
     },
     {
@@ -92,8 +92,8 @@ JOBS = [
         "tags": ["Senior PMM", "Analytics", "Positioning", "Remote", "$130–160K"],
         "why": (
             "Strong positioning and messaging mandate at an analytics company, remote, and a genuine "
-            "step up to Senior PMM. Gap: they want a couple more years and one product launch she "
-            "led end-to-end — a stretch on seniority, so lead with the launch she owned."
+            "step up to Senior PMM. Gap: they want a couple more years and one product launch they "
+            "led end-to-end — a stretch on seniority, so lead with the launch they owned."
         ),
     },
     {
@@ -110,7 +110,7 @@ JOBS = [
         "tags": ["PMM", "Series B", "Platform", "Remote", "$120–145K + equity"],
         "notes": "2nd round with the CMO on Tuesday.",
         "why": (
-            "Series B platform hiring its first PMM — her 0->1 strength, remote, real equity. "
+            "Series B platform hiring its first PMM — their 0->1 strength, remote, real equity. "
             "Gap: early-stage scope and runway are unproven; press on ownership and budget in the "
             "interview."
         ),
@@ -129,8 +129,8 @@ JOBS = [
         "tags": ["Senior PMM", "Cloud Infra", "Hybrid", "New York, NY", "$140–170K"],
         "why": (
             "A real level-up to Senior PMM with a cloud-infra platform and strong comp. Gap: NYC "
-            "hybrid (3 days) is a stretch against her remote preference, and the role folds in some "
-            "field marketing beyond her core — verify the mandate."
+            "hybrid (3 days) is a stretch against their remote preference, and the role folds in some "
+            "field marketing beyond their core — verify the mandate."
         ),
     },
     {
@@ -148,7 +148,7 @@ JOBS = [
         "tags": ["PMM", "Platform", "Remote", "$125–150K + equity"],
         "notes": "Verbal offer — negotiating title + equity.",
         "why": (
-            "Platform PMM at a company she'd love, remote, top-of-range comp, and a warm referral "
+            "Platform PMM at a company they'd love, remote, top-of-range comp, and a warm referral "
             "carried it in. Gap: the leveling reads a touch junior for the scope — negotiate the "
             "title alongside the equity."
         ),
@@ -160,7 +160,7 @@ for j in JOBS:
 DEMO = {
     "jobs": {
         "jobs": JOBS,
-        "resumePrefix": "Maya Okonkwo - ",
+        "resumePrefix": "Johnny Fakeuser - ",
         "glassdoor": {
             "Sentinel Security": {"rating": 4.2},
             "Loop Data": {"rating": 3.6},
@@ -189,7 +189,7 @@ DEMO = {
         "voice": "supportive",
         "cli": {"claude": False, "gemini": False},
         "profile": {
-            "name": "Maya Okonkwo",
+            "name": "Johnny Fakeuser",
             "current_role": "Product Marketing Manager",
             "target_title": "Senior Product Marketing Manager",
             "target_comp": "$120K–$150K",
@@ -244,7 +244,7 @@ window.__DEMO__ = %s;
     var bar = document.createElement('div');
     bar.style.cssText = 'background:linear-gradient(90deg,#0072B2,#E69F00);color:#fff;font:600 12.5px Inter,system-ui,sans-serif;'
       + 'padding:7px 14px;text-align:center;letter-spacing:.2px;';
-    bar.innerHTML = 'Interactive demo &middot; fictional data (Maya Okonkwo) &middot; nothing is saved. '
+    bar.innerHTML = 'Interactive demo &middot; fictional data (Johnny Fakeuser) &middot; nothing is saved. '
       + 'Get the real thing at <b>github.com/&hellip;/bellows-career-system</b>';
     var w = document.querySelector('.wrap');
     (w ? w.parentNode.insertBefore(bar, w) : document.body.insertBefore(bar, document.body.firstChild));

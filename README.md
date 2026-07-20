@@ -8,6 +8,13 @@
 tailoring, interview prep, and salary negotiation, all from one profile. Human-in-the-loop:
 it never auto-applies.**
 
+<p align="center">
+  <img src="assets/hub-screenshot.png" width="900"
+       alt="The Bellows Career Hub: a kanban pipeline with To apply / Applied / Interviewing / Offer columns, each job card showing an honest 1-10 fit score, Glassdoor rating, salary band, commute, ATS match %, and warm-contact routing.">
+</p>
+
+<p align="center"><em>The Career Hub, running on fictional demo data. Note the score-4 role it tells you to <strong>skip</strong>.</em></p>
+
 A human-in-the-loop career system. Two halves that feed each other:
 
 - **Job search** — sweep company ATS feeds for in-lane roles, score them honestly
@@ -25,7 +32,7 @@ humorous, or analytical (delivery only; the honest substance never changes).
 
 > **Try it first —** open **[`starter/hub-demo.example.html`](starter/hub-demo.example.html)** in your
 > browser for a fully interactive demo: kanban, detail drawer, filters, and drag-to-status, all working
-> from fictional example data (Maya Okonkwo). No install, no server, nothing saved.
+> from fictional example data (Johnny Fakeuser). No install, no server, nothing saved.
 
 ## Contents
 
@@ -138,7 +145,7 @@ The rest of this section is the manual (Claude Desktop) path.
    command center with progress, launchers, coach voice, and the full pipeline.
 
 Read the `*.example.*` files in [`starter/`](starter/) first — the whole system filled in for a fictional
-person (Maya Okonkwo), including a role it says to *skip*. Seeing "good" takes five minutes and saves an hour
+person (Johnny Fakeuser), including a role it says to *skip*. Seeing "good" takes five minutes and saves an hour
 of staring at blank templates.
 
 ## Layout

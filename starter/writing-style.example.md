@@ -1,4 +1,4 @@
-# My Writing Style — Maya Okonkwo (WORKED EXAMPLE — fictional)
+# My Writing Style — Johnny Fakeuser (WORKED EXAMPLE — fictional)
 
 > **What to notice:** the *samples* at the bottom do more work than the rules at the top. Rules tell the
 > system what to avoid; samples teach it what you actually sound like. Paste real writing — imperfect is fine,
@@ -35,12 +35,12 @@
 _Real samples. This is the part that matters._
 
 ### Sample 1 — Slack message to a skeptical sales director
-> Fair pushback, and I'd rather test it than argue about it. Give me two weeks and an A/B test on the new
+> Fair pushback, and I'd rattheir test it than argue about it. Give me two weeks and an A/B test on the new
 > landing page. If signups don't move, we put the old hero line back and I'll say so myself. If they do move,
 > we stop having this conversation. Deal?
 
 ### Sample 2 — Email to a hiring manager (cold-ish, after a referral)
-> Hi Priya - Lena Ostrowski suggested I reach out.
+> Hi Priya - Lena Placeholder suggested I reach out.
 >
 > I saw the Senior PMM role, and the pricing and packaging line in the JD is what got my attention. That's
 > the part most PMMs quietly avoid. I owned the launch content and landing page for a usage-based packaging
@@ -49,6 +49,6 @@ _Real samples. This is the part that matters._
 >
 > Happy to walk through how it actually went, including the parts that didn't work. Free Thursday or Friday?
 
-### Sample 3 — A LinkedIn post opener she wrote
+### Sample 3 — A LinkedIn post opener they wrote
 > Most competitive battlecards die in a folder nobody opens. Ours got used because I stopped writing them
 > for marketing and started writing them for the rep who's about to get asked a question they can't answer.
