@@ -37,6 +37,7 @@ from urllib.parse import quote
 
 import _paths  # noqa: F401  (side-effect: adds repo root to sys.path for `import config`)
 import config  # file paths (all under personal/) + the shared dashboard shell in engine/
+from ats_url import ats_url_for  # company -> ATS careers board
 
 PORT = int(os.environ.get("SWEEP_PORT", "8765"))
 
@@ -221,12 +222,17 @@ def job_docs(doc, prefix):
 
 
 def jobs_payload():
-    """load_jobs() enriched with a per-job `docs` list the dashboard renders as-is.
-    Reads a fresh copy each call, so this never mutates jobs.json on disk."""
+    """load_jobs() enriched with a per-job `docs` list and an `atsUrl` the dashboard
+    renders as-is. Reads a fresh copy each call, so this never mutates jobs.json."""
     d = load_jobs()
     prefix = d.get("resumePrefix") or ""
+    companies = getattr(config, "COMPANIES", []) or []
     for j in d.get("jobs", []):
         j["docs"] = job_docs(j.get("doc"), prefix)
+        # The company's ATS board, when we know it. Aggregator links go stale and
+        # drop detail; the ATS is where the live posting is, which is what the
+        # "validate at source" flags on so many rows are asking for.
+        j["atsUrl"] = ats_url_for(j.get("co"), companies)
     return d
 
 

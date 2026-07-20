@@ -155,7 +155,7 @@ of staring at blank templates.
 | `setup.py` | one-command scaffolder — builds `personal/` from the starter templates. Run first. |
 | `personal/` | **all your data — gitignored.** userconfig, career profile, applications, reconnect list, data. |
 | `config.py` | engine config loader — reads `personal/userconfig.py`, defines paths. Don't edit. |
-| `engine/` | the tools: sweep, triage scorer, résumé/cover builders, `resume_score.py` (standalone 0–100 résumé health check), `server.py` (Hub app server), and the repeatable lead pipeline — `triage_leads.py` (dedupe new leads → worksheet) + `add_jobs_batch.py` (idempotent batch-add). `test_links.py` checks every dashboard link. |
+| `engine/` | the tools: sweep, triage scorer, résumé/cover builders, `resume_score.py` (standalone 0–100 résumé health check), `ats_url.py` (company → ATS careers board), `server.py` (Hub app server), and the repeatable lead pipeline — `triage_leads.py` (dedupe new leads → worksheet) + `add_jobs_batch.py` (idempotent batch-add). `test_links.py` checks every dashboard link. |
 | `bellows.bat` / `bellows.sh` | launch the Career Hub (starts `server.py`, opens the browser). |
 | `skills/` | the 13 Bellows skill packages: career-profile, voice-profile, self-assessment, positioning, career-coach (roadmap + weekly check-in), apply-pipeline (find + score), resume-tailor, network (reconnect + outreach + references), informational-interview, interview-prep (prep + follow-up), negotiation, linkedin-optimizer, first-90-days. |
 | `engine/hub.html` | the **Career Hub** — the single surface: progress, coaching launchers, coach-voice selector, and the full job pipeline (kanban + detail drawer + lead sweep). |
