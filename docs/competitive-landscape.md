@@ -42,6 +42,25 @@ The finding worth keeping, because it will recur for anyone naming in this marke
 
 _Also noted in that thread: **[career-ops](https://github.com/santifer/career-ops)** (OSS, CLI, AI-heavy — closer to us in spirit, but token-hungry and command-line only), plus bypass.uno and jobs.myrlin.io (auto-apply, waitlisted)._
 
+## Closest architectural twin — suraj-davariya/ai-job-search (reviewed 2026-07-20)
+**[github.com/suraj-davariya/ai-job-search](https://github.com/suraj-davariya/ai-job-search)** — MIT, ~14★, 128 commits, actively developed. And, with some irony, **it is also named "CareerForge"** — a third independent claimant on the name we just left. That retroactively confirms the rename was right, not over-cautious.
+
+This is a nearer relative than SearchSteward: where SearchSteward is a hosted SaaS, this is a **local-first toolkit that runs inside Claude Code** — the same shape as our folder mode. Slash commands (`/setup`, `/search`, `/apply`, `/upskill`, `/expand`, `/reset`), a profile built by interviewing you, tailored CV + cover letter per role, and a **loopback-only local dashboard** (Next.js on `127.0.0.1:4480`) reading a flat CSV as the single source of truth. Ours is `hub.html` + `server.py` over `pipeline.md`. Same idea, different file format.
+
+**Three independent implementations now share our core principles**, which is about as much design validation as this space offers: local-first with nothing uploaded, never auto-submits, no fabricated skills, and a profile-as-single-source-of-truth.
+
+**Worth stealing (ranked):**
+1. **Adversarial reviewer pass.** After drafting the CV and cover letter they spawn a *second* agent to critique it, apply revisions, and independently verify claims made about the company. We have the de-AI checklist and integrity flags, but nothing adversarial. This fits our honesty rule better than it fits theirs.
+2. **`/expand` — competency discovery with source attribution.** Mines your own documents, GitHub repos, and the web for skills you never wrote down, and adds only approved items *with the source recorded*. That is the no-fabrication rule pointed in the opposite direction: not "don't invent," but "go find the evidence you forgot." It would directly attack our `[NEED METRIC]` backlog.
+3. **`/upskill` — gap analysis → researched learning plan** against the roles actually in your tracker. Our `career-coach` names the skills to acquire; it doesn't build the study sequence.
+4. Cover letters written in the *posting's* language, plus 12-language localisation. Not a priority for a US search, but a real capability we lack.
+
+**Where we're stronger:**
+- **Coaching arc.** Their own docs say it "does not provide active coaching." They have interview prep and upskill; no self-assessment, positioning, 3–10yr roadmap, weekly accountability loop, negotiation, or first-90-days.
+- **Sourcing quality.** They search job portals via **web search**; we poll ATS endpoints directly (Greenhouse/Lever/Ashby/Workday). Direct polling is the thing both we and SearchSteward independently concluded beats aggregator noise.
+- **`.docx` over LaTeX PDF.** They compile beautiful two-page LaTeX CVs. Ours are `python-docx`, and deliberately so: our format rules were learned from real ATS import failures (Workday truncating titles at commas, blank-title imports). A LaTeX PDF is prettier and parses worse. This is a genuine advantage, not a gap.
+- **Warm-path routing** (reconnect list, referral-first for senior roles) and **negotiation anchored to your own comp floor** — neither exists there.
+
 ## The market, in five categories
 Almost every competitor is a **point tool** — it does one job well and stops. Bellows spans the whole arc, on your own machine.
 
