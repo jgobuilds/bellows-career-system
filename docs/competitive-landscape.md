@@ -117,7 +117,17 @@ Six things the market can't match — grounded in the research above:
 
 Ranked by value / fit with our principles. **#1 was promoted to the top after the SearchSteward review (2026-07-20)** — it's the one gap a direct competitor has already proven valuable, and without it the scoring rubric can never be validated against reality:
 
-0. **Outcomes analytics — the feedback loop.** Response rate by score band, résumé-version performance, referral lift, whether applying within 48 hours matters, and which JD keywords correlate with reaching a screen. Right now a score of 8 is an *assertion*; with this it becomes a *prediction that can be checked*, and the weights can be tuned from evidence instead of intuition. Needs one new field (date applied, already implicit) plus a response/outcome status, then a panel on the Hub. Highest-value item on this list.
+0. **Outcomes analytics — the feedback loop.** Right now a score of 8 is an *assertion*; with this it becomes a *prediction that can be checked*, and the weights get tuned from evidence instead of intuition. Both close competitors have this and we don't. Concrete spec, informed by seeing both:
+
+   **The one view neither of them fully builds — build this first:** a **score band × outcome cross-tab.** SearchSteward claims "response rate by score band"; [ai-job-search's dashboard](https://suraj-davariya.github.io/ai-job-search/dashboard/) shows a fit-distribution histogram but not distribution *against outcome*. A histogram tells you how you scored things; the cross-tab tells you whether the scoring **works**. If 8s and 5s convert identically, the rubric is decoration.
+
+   **Supporting views (their visual vocabulary is good, borrow it):** a 4-KPI header — total applied, velocity with a 7d/30d toggle, average score, and **response/interview rate**; applications-per-week bars; a status-mix funnel; and a **contribution-graph activity calendar**. That last one isn't a vanity metric for us: `career-coach`'s weekly loop is explicitly "manage inputs, not outcomes," and it currently makes the user read `pipeline.md` by hand to count reps. An activity graph *is* that loop, rendered.
+
+   **Data we still need:** a response/outcome field and its date (we have `status` but no dated transitions), and which résumé version went out. Everything else — dates, scores, `warm` flag, company — is already in `pipeline.md`.
+
+   **Benchmarks to measure against:** SearchSteward reports 104 applications → 23 screens (22%); ai-job-search's demo shows a 21% interview rate. Two independent implementations landing near ~20% gives us a target instead of a guess.
+
+   _Design note: their dashboard answers "how am I doing"; our Hub answers "what do I do next" (Next-step banner, launchers, kanban). These are complements, not substitutes — add the retrospective view without burying the action view._
 
 1. **Human-in-the-loop autofill.** Simplify's killer feature is form-autofill on Workday/Greenhouse/Lever/Ashby (~85–90% accuracy). We refuse to *auto-submit* — but a browser helper that **fills the form and lets you review + press send** saves the tedium without crossing our line. High value, on-brand.
 2. **Deeper ATS keyword scoring.** Rezi/Jobscan do section-by-section keyword density + hard/soft-skill coverage. We have `ats_match.py` (basic, now surfaced as the ATS % chip) — deepen it into a per-section coverage report in the tailoring step.
