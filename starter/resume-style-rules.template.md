@@ -53,11 +53,22 @@ Both are satisfied by separating the two blocks, because they are not the same t
 
 `resume_builder` implements this via a `"level"` field on the spec (default `executive`):
 
-| `level` | Order | Use for |
-|---|---|---|
-| `executive` | Summary → Competencies → **Experience** → Skills | Director, Head-of, AVP, VP, C-suite. The record is the pitch; tools corroborate it. Putting two blocks above Experience pushes the strongest content off the first screen. |
-| `manager` | Summary → Competencies → Skills → **Experience** | Manager / lead / player-coach. Tools matter to the screen but must not outrank scope. |
-| `ic` | Summary → **Skills** → Competencies → Experience | Senior IC / staff / hands-on. The exact-tool match IS the screen. |
+| `level` | Order | Pages | Use for |
+|---|---|---|---|
+| `executive` | Summary → Competencies → **Experience** → Skills → Education | 2 | Director, Head-of, AVP, VP, C-suite. The record is the pitch; tools corroborate it. Putting two blocks above Experience pushes the strongest content off the first screen. |
+| `manager` | Summary → Competencies → Skills → **Experience** → Education | 2 | Manager / lead / player-coach. Tools matter to the screen but must not outrank scope. |
+| `ic` | Summary → **Skills** → Competencies → Experience → Education | 2 | Senior IC / staff / hands-on. The exact-tool match IS the screen. |
+| `entry` | Summary → **Education** → Skills → Competencies → Experience | 1 | Early career, roughly 0-3 years. A new-grad résumé **inverts** the standard order: with a thin work history the degree is the strongest credential, so education leads. One page. |
+
+**Early career specifics.** Omit `competencies` entirely at `entry` — a Core Competencies grid is an
+executive device and reads as padding on a new-grad résumé (`validate()` warns if you leave it in).
+Put internships, co-ops, and substantial course/personal projects in `experience` like any other role;
+they are the work history at this stage. The decision rule if it's close: **lead with whichever is the
+stronger signal.** A 3.9 from a strong program with one internship leads with education; a Google
+internship with a 3.4 leads with experience — set `level` accordingly.
+
+`Earlier Experience`, when present, always renders immediately after the main experience block,
+wherever that block sits in the order.
 
 Pick the level from the **target role**, not from your current title: apply to a hands-on player-coach
 posting with `manager`, and to a Director/VP posting with `executive`, even if the résumé content is

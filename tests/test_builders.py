@@ -61,16 +61,62 @@ class TestResumeValidate(unittest.TestCase):
 
 
 class TestSectionOrderByLevel(unittest.TestCase):
+    def _order(self, level):
+        return resume_builder.SECTION_ORDERS[level]
+
     def test_executive_puts_experience_before_tools(self):
         # the record is the pitch at Director/VP; the tool list supports it
-        self.assertEqual(
-            resume_builder.SECTION_ORDERS["executive"],
-            ("competencies", "experience", "skills"),
-        )
+        o = self._order("executive")
+        self.assertLess(o.index("experience"), o.index("skills"))
 
     def test_ic_leads_with_tools(self):
         # at IC level the exact-tool match IS the screen
-        self.assertEqual(resume_builder.SECTION_ORDERS["ic"][0], "skills")
+        self.assertEqual(self._order("ic")[0], "skills")
+
+    def test_entry_leads_with_education(self):
+        # a thin work history makes the degree the strongest credential
+        o = self._order("entry")
+        self.assertEqual(o[0], "education")
+        self.assertLess(o.index("education"), o.index("experience"))
+
+    def test_education_trails_experience_for_everyone_else(self):
+        for level in ("executive", "manager", "ic"):
+            o = self._order(level)
+            self.assertGreater(
+                o.index("education"),
+                o.index("experience"),
+                f"{level}: education should follow experience",
+            )
+
+    def test_entry_targets_one_page_others_two(self):
+        self.assertEqual(resume_builder.LEVELS["entry"]["pages"], 1)
+        for level in ("executive", "manager", "ic"):
+            self.assertEqual(resume_builder.LEVELS[level]["pages"], 2)
+
+    def test_entry_with_competency_grid_warns(self):
+        spec = {
+            "level": "entry",
+            "competencies": ["Leadership | Strategy"],
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Analyst",
+                    "location_dates": "City, ST | 2024 - 2026",
+                    "bullets": [],
+                }
+            ],
+        }
+        self.assertTrue(
+            any("entry" in w and "Competencies" in w for w in resume_builder.validate(spec))
+        )
+
+    def test_every_level_renders_all_four_sections_once(self):
+        for level, cfg in resume_builder.LEVELS.items():
+            self.assertEqual(
+                sorted(cfg["order"]),
+                ["competencies", "education", "experience", "skills"],
+                f"{level}: must emit each section exactly once",
+            )
 
     def test_competency_grid_stays_above_experience_at_every_level(self):
         # the compact keyword grid is ATS-indexed and orients a human in ~10s
