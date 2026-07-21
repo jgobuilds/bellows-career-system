@@ -109,5 +109,53 @@ class TestBackwardCompatibility(unittest.TestCase):
         self.assertIsNone(empty.search("anywhere at all"))
 
 
+class TestWorkAuthCarryThrough(unittest.TestCase):
+    """score_file builds an explicit dict, so anything not named here is silently
+    dropped. That is exactly how the work-auth columns got lost between the sweep
+    and the dashboard the first time."""
+
+    def _run(self, extra):
+        import csv
+        import tempfile
+
+        row = {
+            "title": "Director of Data Governance",
+            "company": "Acme",
+            "location": "Remote",
+            "date_posted": "2026-07-01",
+            "job_url": "https://example.com/1",
+        }
+        row.update(extra)
+        with tempfile.TemporaryDirectory() as d:
+            src = os.path.join(d, "in.csv")
+            dst = os.path.join(d, "out.csv")
+            with open(src, "w", newline="", encoding="utf-8") as fh:
+                w = csv.DictWriter(fh, fieldnames=list(row))
+                w.writeheader()
+                w.writerow(row)
+            lead_score.score_file(src, dst, os.path.join(d, "nonexistent-pipeline.md"))
+            with open(dst, encoding="utf-8") as fh:
+                return list(csv.DictReader(fh))
+
+    def test_verdict_and_evidence_survive_scoring(self):
+        out = self._run(
+            {
+                "work_auth": "no_sponsorship",
+                "work_auth_concern": "posting states it does not sponsor",
+                "work_auth_evidence": "we are unable to offer visa sponsorship",
+            }
+        )
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["work_auth"], "no_sponsorship")
+        self.assertIn("does not sponsor", out[0]["work_auth_concern"])
+        self.assertIn("unable to offer", out[0]["work_auth_evidence"])
+
+    def test_missing_columns_default_to_unstated(self):
+        # rows swept before the feature existed must not blow up or imply permission
+        out = self._run({})
+        self.assertEqual(out[0]["work_auth"], "unstated")
+        self.assertEqual(out[0]["work_auth_concern"], "")
+
+
 if __name__ == "__main__":
     unittest.main()
