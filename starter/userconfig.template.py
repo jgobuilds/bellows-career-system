@@ -47,8 +47,19 @@ LOCATIONS = [
 ]
 REMOTE_ONLY = False
 
-GEO_GOOD = ["remote", "your city", "your state", "your metro suburbs"]
-GEO_OK = ["hybrid", "united states", "nationwide", "anywhere", "remote us"]
+# PLACES only. A work model ("remote", "hybrid") is NOT a location — keeping
+# "hybrid" here would score "Hybrid - San Francisco Office" as commutable no
+# matter where you live. Work-model words belong in GEO_REMOTE below.
+GEO_GOOD = ["your city", "your state", "your metro suburbs"]
+GEO_OK = ["a metro you'd commute to", "united states"]
+
+# Work-model words. A remote role scores as home-range — but only when no
+# GEO_EXCLUDE term also appears, since "Remote - India" is not remote to you.
+GEO_REMOTE = ["remote", "anywhere", "nationwide", "remote us", "work from home"]
+
+# Places you will NOT relocate to. Leave empty if you're open anywhere.
+# List countries and metros; this is what stops off-geo roles scoring as Keep.
+GEO_EXCLUDE = ["india", "united kingdom", "canada", "emea", "apac", "europe"]
 
 # =============================================================================
 # 4. YOUR LANE  (words that mean "this is my kind of role")
