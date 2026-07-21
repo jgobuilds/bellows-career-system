@@ -38,14 +38,39 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # =============================================================================
 # All personal settings live in ONE place: config.py. Nothing to edit here.
 # =============================================================================
+import career_ladder
 import config as CFG
 import jobkey  # the one canonical job-identity module (dedupe vs. pipeline.md)
 
 LANE_STRONG = CFG.terms_to_regex(CFG.LANE_STRONG)
 LANE_MED = CFG.terms_to_regex(CFG.LANE_MED)
 LANE_ADJ = CFG.terms_to_regex(CFG.LANE_ADJ)
-LEVEL_HI = CFG.terms_to_regex(CFG.LEVEL_AT_OR_ABOVE)
-LEVEL_MID = CFG.terms_to_regex(CFG.LEVEL_BELOW)
+# Level terms can be listed by hand, or derived from a single TARGET_LEVEL via the
+# career ladder. A hand-written list ALWAYS wins — someone who typed one meant it.
+# The ladder exists because a bare word carries no level: "principal" and "lead" are
+# below target in a director search and above it in an IC search, and this repo
+# ships one config of each.
+_TARGET_LEVEL = getattr(CFG, "TARGET_LEVEL", None)
+_LEVEL_REACH = getattr(CFG, "LEVEL_REACH", None)  # rungs above target still worth seeing
+
+
+def _level_terms():
+    above = list(getattr(CFG, "LEVEL_AT_OR_ABOVE", None) or [])
+    below = list(getattr(CFG, "LEVEL_BELOW", None) or [])
+    if above or below or not _TARGET_LEVEL:
+        return above, below
+    return (
+        career_ladder.terms_at_or_above(_TARGET_LEVEL, _LEVEL_REACH),
+        career_ladder.terms_below(_TARGET_LEVEL),
+    )
+
+
+_LEVEL_ABOVE, _LEVEL_BELOW = _level_terms()
+LEVEL_HI = CFG.terms_to_regex(_LEVEL_ABOVE)
+LEVEL_MID = CFG.terms_to_regex(_LEVEL_BELOW)
+_BELOW_REASON = (
+    f"below your target level ({_TARGET_LEVEL})" if _TARGET_LEVEL else "below your target level"
+)
 # Geo terms come in three kinds and mixing them is what broke this before: a
 # WORK MODEL ("remote", "hybrid") is not a PLACE. Leaving "hybrid" in GEO_OK meant
 # "Hybrid-San Francisco Office" scored as commutable, and "remote" in GEO_GOOD meant
@@ -122,7 +147,7 @@ def score_row(title, location):
         lvl = 3
     elif LEVEL_MID.search(t):
         lvl = 1
-        reasons.append("below Director level")
+        reasons.append(_BELOW_REASON)
     else:
         lvl = 0
         reasons.append("no leadership level in title")

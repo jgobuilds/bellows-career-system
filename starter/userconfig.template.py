@@ -103,6 +103,15 @@ LANE_ADJ = ["reliability", "platform", "architecture"]
 # =============================================================================
 # 5. YOUR LEVEL  (target level and up)
 # =============================================================================
+# Rather than hand-typing the two lists, you can name ONE rung and let the career
+# ladder generate them — it knows both tracks, so it gets "principal" and "lead"
+# right for your target instead of your guessing:
+#     TARGET_LEVEL = "director"   # rung keys: engine/career_ladder.py
+#     LEVEL_REACH = 2             # optional cap on how far above target to reach
+#     LEVEL_AT_OR_ABOVE = []      # leave BOTH lists empty to use the ladder
+# Preview exactly what you'd get, with ambiguity warnings:
+#     python engine/career_ladder.py director 2
+# An explicit list always wins — if you typed one, it is used as-is.
 LEVEL_AT_OR_ABOVE = ["chief", "head of", "vice president", "vp", "avp", "director"]
 LEVEL_BELOW = ["senior manager", "sr manager", "principal", "lead"]
 
