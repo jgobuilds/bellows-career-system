@@ -73,6 +73,7 @@ PER_CALL_PAUSE = 0.6  # be polite to public feeds
 # will 404 harmlessly if wrong; confirm and mark validated when it returns data).
 # ---------------------------------------------------------------------------
 import config as CFG
+import work_auth
 
 # All personal settings live in config.py — nothing to edit here.
 COMPANIES = CFG.COMPANIES
@@ -488,6 +489,14 @@ def sweep(
                 continue
             if not r.get("description"):
                 r["description"] = _enrich_desc(r, c)
+            # Work-authorization terms live in the JD body, never the title, so this
+            # is the only place in the pipeline that can read them. Only the compact
+            # verdict travels downstream; the description itself is not persisted
+            # past the sweep CSV.
+            _wa = work_auth.classify(r.get("description"))
+            r["work_auth"] = _wa.verdict
+            r["work_auth_evidence"] = _wa.evidence
+            r["work_auth_concern"] = work_auth.concern(_wa, getattr(CFG, "WORK_AUTH", None)) or ""
             r["search"] = r.pop("industry", "")  # reuse 'search' col to carry industry
             kept.append(r)
             hits += 1
@@ -533,6 +542,9 @@ CSV_COLS = [
     "site",
     "job_url",
     "search",
+    "work_auth",
+    "work_auth_concern",
+    "work_auth_evidence",
     "description",
 ]
 
