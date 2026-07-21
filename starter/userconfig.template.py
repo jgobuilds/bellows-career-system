@@ -11,6 +11,11 @@ real settings never enter the repo.
 
 You write PLAIN WORDS here, not regex. config.terms_to_regex() compiles them.
 
+The example values below describe a DATA-LEADERSHIP search, because that is what
+the author was running. Nothing in the engine is specific to data or technology
+roles — every term the scorer matches on is read from this file. For a worked
+non-technical version (product marketing), see starter/userconfig.example.py.
+
 >>> KNOWN LIMIT, READ THIS ONCE <<<
 The triage scorer only ever sees a job's TITLE and LOCATION - never the JD body.
 So HARD_GATES can only catch what's written in the title. Title-level gates are a
@@ -121,6 +126,16 @@ PENALTY_LANES = {
 
 # =============================================================================
 # 9. NOISE + OFF-CONTEXT -> always Drop  (obviously-wrong roles the boards surface)
+#
+#     >>> EDIT THESE TWO BEFORE YOUR FIRST SWEEP. <<<
+#     They are the only lists that discard roles SILENTLY, and the examples below
+#     are one specific person's search (data leadership). They are wrong, and
+#     quietly destructive, for many others:
+#       - a recruiter searching for recruiting roles loses them to "recruiter"
+#       - a proposal manager loses theirs to "rfp"
+#       - a nurse manager or payroll lead loses theirs the same way
+#     If a word here could appear in a job you actually want, delete it.
+#     See starter/userconfig.example.py for a non-technical worked version.
 # =============================================================================
 NOISE = ["teacher", "nurse", "driver", "cashier", "recruiter", "payroll"]
 OFF_CONTEXT = ["rfp", "corporate governance", "it governance", "cyber", "grc"]

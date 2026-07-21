@@ -156,6 +156,17 @@ The rest of this section is the manual (Claude Desktop) path.
    floor, target range, and hard walk-away (these drive negotiation and flag step-downs). It's the one file
    you edit — plain words, not regex.
 
+   > **This is not a tech-jobs tool.** Every term the scorer matches on comes from your config, so it
+   > searches whatever field you point it at. The template's sample values happen to describe a data
+   > search, which makes two lists actively dangerous if you copy them unedited: **`NOISE` and
+   > `OFF_CONTEXT` drop roles silently.** A recruiter would lose every result to `"recruiter"`, a
+   > proposal manager to `"rfp"`. Edit those two before your first sweep.
+   >
+   > For a complete non-technical version, see **[`starter/userconfig.example.py`](starter/userconfig.example.py)** —
+   > product marketing, and the companion to the worked profile in `starter/career-profile.example.md`.
+   > It also shows how `LEVEL_AT_OR_ABOVE` inverts: for an IC reaching for Senior, "lead" and "principal"
+   > are levels *above*, where in a director-level search the same words mean *below*.
+
 2. **Install the skills.** Install the `*.skill` packages in `skills/` (Claude Desktop: Settings →
    Capabilities → add skill). `career-profile` and `voice-profile` run first.
 

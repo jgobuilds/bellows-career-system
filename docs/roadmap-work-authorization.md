@@ -1,6 +1,6 @@
 # Roadmap: work authorization, sponsorship, and government jobs
 
-_Status: Phase 1 shipped 2026-07-21. Phases 2-4 not started._
+_Status: Phases 1 and 2 shipped 2026-07-21. Phases 3-4 not started._
 
 This exists because of a feature request worth quoting:
 
@@ -84,11 +84,29 @@ data source, API key, or terms review. Sequenced first for that reason.
 - Verdict computed in `ats_sweep` where the JD body exists, then carried as a
   compact field rather than dragging full description text downstream
 
-### Phase 2 - non-technical lanes (config only)
+### Phase 2 - non-technical lanes (SHIPPED 2026-07-21)
 
-Already architecturally supported. `lead_score` reads every scoring term from
-config (`LANE_STRONG`, `GEO_GOOD`, `HARD_GATES`), so nothing is hardcoded to
-technical roles. This is a documentation and worked-example task, not a code task.
+Confirmed architecturally supported: `lead_score` reads every scoring term from
+config, so nothing is hardcoded to technical roles. No engine change was needed.
+
+But the claim was untrue in practice. The shipped template's sample values describe
+a data-leadership search, and two of its lists **drop roles silently**. Scored
+against the shipped defaults, every non-technical title tested was discarded, three
+of them by `NOISE`/`OFF_CONTEXT` rather than by simply failing to match a lane:
+
+    DROP (NOISE)        Senior Recruiter
+    DROP (NOISE)        Nurse Manager
+    DROP (NOISE)        Director of Payroll Operations
+    DROP (OFF_CONTEXT)  Proposal Manager (RFP)
+
+A recruiter searching for recruiting roles lost them to the word "recruiter". So
+Phase 2 shipped `starter/userconfig.example.py`, a complete non-technical worked
+config (product marketing, matching the existing `career-profile.example.md`
+persona), plus warnings on the two dangerous lists and a README note.
+
+`tests/test_starter_configs.py` pins two invariants: the example must define every
+setting the template does (so it cannot silently drift), and no config's own
+`NOISE`/`OFF_CONTEXT` may match its own target titles or core lane terms.
 
 ### Phase 3 - federal ingestion via USAJOBS
 
