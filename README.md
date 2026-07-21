@@ -15,6 +15,23 @@ it never auto-applies.**
 
 <p align="center"><em>The Career Hub, running on fictional demo data. Note the score-4 role it tells you to <strong>skip</strong>.</em></p>
 
+> **Try it first —** open **[`starter/hub-demo.example.html`](starter/hub-demo.example.html)** in your
+> browser for a fully interactive demo: kanban, detail drawer, filters, and drag-to-status, all working
+> from fictional example data (Johnny Fakeuser). No install, no server, nothing saved.
+
+## Contents
+
+- [Try the demo](starter/hub-demo.example.html) — one self-contained HTML file, no install
+- [What this is *not*](#what-this-is-not) — quality over volume, and why
+- [Your data stays yours](#your-data-stays-yours) — the privacy model
+- [Why Bellows](#why-bellows) — how it differs from the paid tools
+- [Prerequisites](#prerequisites) — what to install first
+- [First-time setup](#first-time-setup) — clone, scaffold, run
+- [Layout](#layout) — what every file and folder is
+- [Loops](#loops) — the day-to-day workflow
+- [competitive-landscape.md](docs/competitive-landscape.md) — full market comparison + enhancement backlog
+- [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, tests, and the automated quality gates
+
 ## What this is *not*
 
 **This is not a high-volume application machine.** It will not fire off a hundred
@@ -56,23 +73,6 @@ A local **Career Hub** (`bellows.bat` / `bellows.sh`) is the command center: it 
 your progress, launches each step (copy a prompt into your AI, or run a one-shot via the
 `claude`/`gemini` CLI), and lets you pick a **coach voice** — supportive, tough-love, zen,
 humorous, or analytical (delivery only; the honest substance never changes).
-
-> **Try it first —** open **[`starter/hub-demo.example.html`](starter/hub-demo.example.html)** in your
-> browser for a fully interactive demo: kanban, detail drawer, filters, and drag-to-status, all working
-> from fictional example data (Johnny Fakeuser). No install, no server, nothing saved.
-
-## Contents
-
-- [Try the demo](starter/hub-demo.example.html) — one self-contained HTML file, no install
-- [What this is *not*](#what-this-is-not) — quality over volume, and why
-- [Your data stays yours](#your-data-stays-yours) — the privacy model
-- [Why Bellows](#why-bellows) — how it differs from the paid tools
-- [Prerequisites](#prerequisites) — what to install first
-- [First-time setup](#first-time-setup) — clone, scaffold, run
-- [Layout](#layout) — what every file and folder is
-- [Loops](#loops) — the day-to-day workflow
-- [competitive-landscape.md](docs/competitive-landscape.md) — full market comparison + enhancement backlog
-- [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, tests, and the automated quality gates
 
 ## Your data stays yours
 
