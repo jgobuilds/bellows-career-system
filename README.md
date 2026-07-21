@@ -15,6 +15,33 @@ it never auto-applies.**
 
 <p align="center"><em>The Career Hub, running on fictional demo data. Note the score-4 role it tells you to <strong>skip</strong>.</em></p>
 
+## What this is *not*
+
+**This is not a high-volume application machine.** It will not fire off a hundred
+résumés a week, and adding an auto-applier is explicitly out of scope. Mass-applying
+is getting flagged as spam, and it doesn't work anyway — a generic application to a role
+you're a 5 for is worse than no application, because it costs you the company.
+
+**What it does instead is understand you first, then find fewer, better roles.**
+
+1. **Who you are** — a career profile built by interview: your real scope, your metrics,
+   your honest ceilings, and a blunt *"what I am NOT"* section that names the lanes you
+   should skip.
+2. **What you want, and why** — self-assessment and a 3-to-10-year roadmap anchored to the
+   *why*, not just the next title. A plan up a ladder you don't want is a failure, however
+   logical.
+3. **Sourcing that matches that** — sweep company ATS feeds directly (not aggregators) for
+   roles genuinely in your lane, then score each one honestly, out loud, gaps included.
+4. **Depth on the few that survive** — tailor from one source of truth, route senior roles
+   through a warm intro first, and prep the interview properly.
+
+The scoring is designed to be *unflattering*. The demo ships with a role scored **4** and
+labeled "don't apply," because a system that only produces 8s and 9s is telling you what you
+want to hear, and you'll stop trusting it. **Ten well-matched applications beat two hundred
+sprayed ones**, and the whole system is built around making those ten actually good.
+
+## How it works
+
 A human-in-the-loop career system. Two halves that feed each other:
 
 - **Job search** — sweep company ATS feeds for in-lane roles, score them honestly
@@ -37,6 +64,7 @@ humorous, or analytical (delivery only; the honest substance never changes).
 ## Contents
 
 - [Try the demo](starter/hub-demo.example.html) — one self-contained HTML file, no install
+- [What this is *not*](#what-this-is-not) — quality over volume, and why
 - [Your data stays yours](#your-data-stays-yours) — the privacy model
 - [Why Bellows](#why-bellows) — how it differs from the paid tools
 - [Prerequisites](#prerequisites) — what to install first
