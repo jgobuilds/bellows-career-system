@@ -61,6 +61,29 @@ GEO_REMOTE = ["remote", "anywhere", "nationwide", "remote us", "work from home"]
 # List countries and metros; this is what stops off-geo roles scoring as Keep.
 GEO_EXCLUDE = ["india", "united kingdom", "canada", "emea", "apac", "europe"]
 
+
+# =============================================================================
+# 3b. WORK AUTHORIZATION  (captured at onboarding - OPTIONAL, opt-in)
+# =============================================================================
+# The two questions application forms actually ask, plus the citizenship status
+# that government postings turn on. Fill these in and the sweep will flag postings
+# that state they do not sponsor, or that require U.S. citizenship.
+#
+# It FLAGS, it never drops - a misread here would bury a good role invisibly, so
+# you always still see the posting, with the sentence that triggered the flag.
+#
+# SENSITIVE. Lives here in personal/ (gitignored) and is NEVER written into a
+# resume or cover letter; see rule 1 in resume-style-rules. Volunteering status
+# unprompted invites filtering before a human reads your record.
+#
+# Leave as None to switch the feature off entirely.
+WORK_AUTH = None
+# WORK_AUTH = {
+#     "authorized_us": True,       # legally authorized to work in the US?
+#     "needs_sponsorship": False,  # will you need sponsorship now or in the future?
+#     "citizenship": "citizen",    # "citizen" | "permanent_resident" | "other"
+# }
+
 # =============================================================================
 # 4. YOUR LANE  (words that mean "this is my kind of role")
 # =============================================================================

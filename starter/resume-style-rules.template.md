@@ -14,6 +14,8 @@ If clearing an ATS keyword target (4) would require a claim you can't defend (1)
 ## 1. Work authorization: implicit, never explicit
 - Do **not** add a "U.S. Citizen" or work-authorization line to the resume header or summary. 18+ years of continuous U.S. employment conveys it implicitly.
 - Add an explicit citizenship/authorization statement **only** when a specific posting makes it a hard knockout (an active-clearance or ITAR-gated role that screens on it) — and confirm with the candidate before adding it, rather than defaulting it on. Cover letters and interviews are the place to raise it if needed, not the resume banner.
+- **This holds whatever your status is — and it matters MOST if you need sponsorship.** Volunteering "requires sponsorship" or "Green Card holder" on a resume invites a filter before a human ever reads your record. The rule is not about hiding anything; it is about sequencing. Answer it when the application form asks, honestly and without hedging, and not one step before.
+- **`WORK_AUTH` in `userconfig.py` is never a document input.** It exists so the sweep can flag postings that state they don't sponsor or require citizenship. No builder reads it, and none should: a document that quietly announces your status has made a disclosure decision on your behalf. **Not volunteering is not the same as concealing** — if a form asks, answer it straight.
 
 ## 2. No em-dashes — and fix the cadence, not just the dash
 - No em-dashes (—) in prose. Rewrite with a comma, colon, semicolon, parentheses, or split into two sentences. Swapping the dash for a comma is not enough; the sentence must not read as an interrupted AI aside.
