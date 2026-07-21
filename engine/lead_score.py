@@ -46,8 +46,29 @@ LANE_MED = CFG.terms_to_regex(CFG.LANE_MED)
 LANE_ADJ = CFG.terms_to_regex(CFG.LANE_ADJ)
 LEVEL_HI = CFG.terms_to_regex(CFG.LEVEL_AT_OR_ABOVE)
 LEVEL_MID = CFG.terms_to_regex(CFG.LEVEL_BELOW)
-GEO_GOOD = CFG.terms_to_regex(CFG.GEO_GOOD)
-GEO_OK = CFG.terms_to_regex(CFG.GEO_OK)
+# Geo terms come in three kinds and mixing them is what broke this before: a
+# WORK MODEL ("remote", "hybrid") is not a PLACE. Leaving "hybrid" in GEO_OK meant
+# "Hybrid-San Francisco Office" scored as commutable, and "remote" in GEO_GOOD meant
+# "Remote - India" scored 2/2 "CT-local" — identical to Hartford. So the work-model
+# words are stripped out of the place lists here rather than in userconfig, which
+# repairs configs already in the wild without anyone editing a file.
+_REMOTE_DEFAULT = ["remote", "anywhere", "nationwide", "work from home", "remote us", "us remote"]
+_WORK_MODEL = {"hybrid", "onsite", "on site", "on-site", "in office", "in-office", "flexible"}
+_remote_terms = [t.lower() for t in getattr(CFG, "GEO_REMOTE", _REMOTE_DEFAULT)]
+
+
+def _places(terms):
+    """Keep only real place names — drop work-model words that aren't locations."""
+    drop = set(_remote_terms) | _WORK_MODEL
+    return [t for t in terms if t.strip().lower() not in drop]
+
+
+GEO_GOOD = CFG.terms_to_regex(_places(CFG.GEO_GOOD))
+GEO_OK = CFG.terms_to_regex(_places(CFG.GEO_OK))
+GEO_REMOTE = CFG.terms_to_regex(_remote_terms)
+# Places you will not go. Checked against remote too: "remote" is only as good as
+# the country qualifying it. Empty by default, so existing configs are unaffected.
+GEO_EXCLUDE = CFG.terms_to_regex(getattr(CFG, "GEO_EXCLUDE", []))
 DOMAIN = CFG.terms_to_regex(CFG.DOMAIN_BONUS)
 HARD_GATE = CFG.terms_to_regex(CFG.HARD_GATES)
 NOISE = CFG.terms_to_regex(CFG.NOISE)
@@ -106,14 +127,25 @@ def score_row(title, location):
         lvl = 0
         reasons.append("no leadership level in title")
 
-    # Geo (0-2)
+    # Geo (0-2). Exclusions are tested against the same string as everything else,
+    # because "remote" is only ever as good as the country qualifying it.
     loc = location or ""
-    if GEO_GOOD.search(loc):
+    has_good, has_ok = GEO_GOOD.search(loc), GEO_OK.search(loc)
+    is_remote, excluded = GEO_REMOTE.search(loc), GEO_EXCLUDE.search(loc)
+    if has_good and not excluded:
         geo = 2
-        reasons.append("remote / CT-local")
-    elif GEO_OK.search(loc):
+        reasons.append("in your home range")
+    elif is_remote and not excluded:
+        geo = 2
+        reasons.append("remote")
+    elif has_ok and not excluded:
         geo = 1
-        reasons.append("commutable-ish / hybrid")
+        reasons.append("commutable-ish")
+    elif has_good or has_ok:
+        # An out-of-range place AND an in-range one — a multi-location posting.
+        # Worth a look, but it can't be a 2: the in-range office may not be hiring.
+        geo = 1
+        reasons.append("multi-location: in-range option listed, verify")
     else:
         geo = 0
         reasons.append("off-geo")
