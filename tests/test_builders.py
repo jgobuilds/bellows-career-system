@@ -60,6 +60,60 @@ class TestResumeValidate(unittest.TestCase):
         self.assertTrue(any("placeholder" in x for x in w), w)
 
 
+class TestSectionOrderByLevel(unittest.TestCase):
+    def test_executive_puts_experience_before_tools(self):
+        # the record is the pitch at Director/VP; the tool list supports it
+        self.assertEqual(
+            resume_builder.SECTION_ORDERS["executive"],
+            ("competencies", "experience", "skills"),
+        )
+
+    def test_ic_leads_with_tools(self):
+        # at IC level the exact-tool match IS the screen
+        self.assertEqual(resume_builder.SECTION_ORDERS["ic"][0], "skills")
+
+    def test_competency_grid_stays_above_experience_at_every_level(self):
+        # the compact keyword grid is ATS-indexed and orients a human in ~10s
+        for level, order in resume_builder.SECTION_ORDERS.items():
+            self.assertLess(
+                order.index("competencies"),
+                order.index("experience"),
+                f"{level}: competencies must precede experience",
+            )
+
+    def test_default_level_is_executive(self):
+        self.assertEqual(resume_builder.DEFAULT_LEVEL, "executive")
+        self.assertIn(resume_builder.DEFAULT_LEVEL, resume_builder.SECTION_ORDERS)
+
+    def test_unknown_level_warns(self):
+        spec = {
+            "level": "principal",  # not a valid key
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "City, ST | 2020 - 2024",
+                    "bullets": [],
+                }
+            ],
+        }
+        self.assertTrue(any("unknown level" in w for w in resume_builder.validate(spec)))
+
+    def test_valid_level_is_silent(self):
+        spec = {
+            "level": "executive",
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "City, ST | 2020 - 2024",
+                    "bullets": [],
+                }
+            ],
+        }
+        self.assertEqual([w for w in resume_builder.validate(spec) if "level" in w], [])
+
+
 class TestReverseChronology(unittest.TestCase):
     def _job(self, company, dates):
         return {

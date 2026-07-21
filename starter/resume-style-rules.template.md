@@ -37,6 +37,36 @@ If clearing an ATS keyword target (4) would require a claim you can't defend (1)
   - **Senior IC / staff / hands-on:** 5-6 granular, tool-forward categories with specific tools named per lane and a dedicated Languages/Tools line — at IC level the exact-tool match IS the screen.
   Down-level from the executive default ONLY when a specific posting is genuinely more hands-on (e.g., the "player-coach, build it yourself" roles). Expand granularity by drawing from the full pool in `career-profile.md`'s cross-role skills index; never invent tools to fill a more-granular structure.
 
+## 3a. Section ORDER scales with level (researched 2026-07-20)
+
+The published advice splits, and both camps are right about different things. Executive-resume
+practice says put a **Core Competencies** keyword grid directly under the summary: it is ATS-indexed
+and orients a human in about ten seconds, and it is what hiring committees actually dwell on. ATS
+guidance says the opposite for skills generally — parsers validate skills **against work history**,
+and senior candidates are told to lead with the track record rather than a list.
+
+Both are satisfied by separating the two blocks, because they are not the same thing:
+
+- **Core Competencies** is a SHORT keyword grid (3-5 lines). It is cheap in space, high in ATS value,
+  and it frames the read. **It sits above Experience at every level.**
+- **Technical Skills** is a LONGER tool list. Its value is level-dependent, so it MOVES.
+
+`resume_builder` implements this via a `"level"` field on the spec (default `executive`):
+
+| `level` | Order | Use for |
+|---|---|---|
+| `executive` | Summary → Competencies → **Experience** → Skills | Director, Head-of, AVP, VP, C-suite. The record is the pitch; tools corroborate it. Putting two blocks above Experience pushes the strongest content off the first screen. |
+| `manager` | Summary → Competencies → Skills → **Experience** | Manager / lead / player-coach. Tools matter to the screen but must not outrank scope. |
+| `ic` | Summary → **Skills** → Competencies → Experience | Senior IC / staff / hands-on. The exact-tool match IS the screen. |
+
+Pick the level from the **target role**, not from your current title: apply to a hands-on player-coach
+posting with `manager`, and to a Director/VP posting with `executive`, even if the résumé content is
+otherwise identical. An unrecognised `level` warns in `validate()` and falls back to `executive`.
+
+Whatever the order, **repeat the high-value terms inside the experience bullets** — a skills block that
+names a tool the bullets never demonstrate is the weakest form of keyword matching, and both camps agree
+it reads as padding.
+
 ## 4. Capitalization: match the register, and be consistent
 - **Proper names stay capitalized** everywhere: products and platforms (Snowflake, dbt, GitHub Copilot, Vertex AI, Tableau, Power BI), named frameworks/patterns (Data Mesh, Medallion Architecture, SAFe, FinOps), and specific org/program/domain names (BI Enablement, Data Governance & Quality, Data Champion program, Enterprise Data Warehouse, Analytics & Data Science Enablement).
 - **Generic concepts stay lowercase in running prose:** data and analytics, self-service adoption, data governance, data observability, change management, operational reliability, incident management, reference-data management. Capitalizing these mid-sentence reads as marketing/AI filler and is grammatically off.

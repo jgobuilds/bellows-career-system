@@ -19,6 +19,7 @@ SPEC SHAPE (see personal/applications/<company>/resume.json for a live example):
   {
     "name": "Firstname Lastname, M.S.",
     "contact": "City, ST  |  email  |  phone  |  linkedin",
+    "level": "executive",            # executive | manager | ic — drives SECTION ORDER
     "summary": "one paragraph",
     "competencies": ["A | B | C", "D | E | F"],          # plain lines, never a table
     "skills": [["Cloud & Warehouse:  ", "Snowflake, ..."]],
@@ -53,6 +54,22 @@ from docx_common import BODY_FONT, BRAND_BLUE, scan_placeholders
 from docx_common import run as _run
 
 PAGE_USABLE_IN = 7.3  # 8.5" Letter minus 0.6" left + 0.6" right margins
+
+# ---- section order by target level (resume-style-rules.md §3a) -------------------
+# Executive-resume practice puts a compact Core Competencies keyword grid right under
+# the summary: it is ATS-indexed and orients a human in ~10 seconds. ATS guidance
+# counters that skills are validated against work history and that senior candidates
+# should lead with the track record. Both are satisfied by keeping the SHORT competency
+# grid high and moving the LONG tool list relative to experience by level.
+SECTION_ORDERS = {
+    # Director / Head-of / VP / C-suite: the record is the pitch; tools support it.
+    "executive": ("competencies", "experience", "skills"),
+    # Manager / lead / player-coach: tools matter to the screen but don't outrank scope.
+    "manager": ("competencies", "skills", "experience"),
+    # Senior IC / staff / hands-on: the exact-tool match IS the screen.
+    "ic": ("skills", "competencies", "experience"),
+}
+DEFAULT_LEVEL = "executive"
 
 # ---- validation against the ATS import rules (resume-style-rules.md §9) ----
 _TITLE_BAD = re.compile(r"[,/]| - ")  # comma, slash, or spaced hyphen truncates titles
@@ -117,6 +134,13 @@ def validate(spec):
             warns.append(f"location/date line is not 'City, ST | dates': {ld!r}")
     for m in sorted(scan_placeholders(spec)):
         warns.append(f"unresolved placeholder in spec text: {m!r}")
+
+    lvl = spec.get("level", DEFAULT_LEVEL)
+    if lvl not in SECTION_ORDERS:
+        warns.append(
+            f"unknown level {lvl!r} — section order fell back to {DEFAULT_LEVEL!r}; "
+            f"use one of {sorted(SECTION_ORDERS)}"
+        )
 
     # Reverse-chronological order: each experience entry must be at least as recent
     # as the one after it, and stacked sub-roles must descend within an employer.
@@ -234,38 +258,52 @@ def build_resume(spec, out_path):
     p = _para(d, before=2)
     _run(p, spec["summary"])
 
-    # Core Competencies (tab-aligned columns — NOT a table)
-    if spec.get("competencies"):
-        _section(d, "Core Competencies")
-        _competencies(d, spec["competencies"], spec.get("competency_columns", 2))
+    def _emit_competencies():
+        """Core Competencies (tab-aligned columns — NOT a table)."""
+        if spec.get("competencies"):
+            _section(d, "Core Competencies")
+            _competencies(d, spec["competencies"], spec.get("competency_columns", 2))
 
-    # Technical Skills
-    if spec.get("skills"):
-        _section(d, "Technical Skills")
-        for label, rest in spec["skills"]:
-            p = _para(d, before=1)
-            _run(p, label, bold=True)
-            _run(p, rest)
+    def _emit_skills():
+        if spec.get("skills"):
+            _section(d, "Technical Skills")
+            for label, rest in spec["skills"]:
+                p = _para(d, before=1)
+                _run(p, label, bold=True)
+                _run(p, rest)
 
-    # Professional Experience.
-    # An entry is either a single role {company, title, location_dates, bullets}
-    # or one employer with stacked sub-roles {company, roles: [{title, location_dates,
-    # bullets}, ...]} — the latter shows promotion history under one company header.
-    _section(d, "Professional Experience")
+    def _emit_experience():
+        """An entry is either a single role {company, title, location_dates, bullets}
+        or one employer with stacked sub-roles {company, roles: [...]} — the latter
+        shows promotion history under one company header."""
+        _section(d, "Professional Experience")
 
-    def _role_block(title, location_dates, bullets, before):
-        _run(_para(d, before=before), title, bold=True)
-        _run(_para(d, after=1), location_dates)
-        for lead, rest in bullets:
-            _bullet(d, lead, rest)
+        def _role_block(title, location_dates, bullets, before):
+            _run(_para(d, before=before), title, bold=True)
+            _run(_para(d, after=1), location_dates)
+            for lead, rest in bullets:
+                _bullet(d, lead, rest)
 
-    for entry in spec["experience"]:
-        _run(_para(d, before=6), entry["company"], bold=True, size=11)
-        if entry.get("roles"):
-            for i, r in enumerate(entry["roles"]):
-                _role_block(r["title"], r["location_dates"], r["bullets"], before=3 if i else 0)
-        else:
-            _role_block(entry["title"], entry["location_dates"], entry["bullets"], before=0)
+        for entry in spec["experience"]:
+            _run(_para(d, before=6), entry["company"], bold=True, size=11)
+            if entry.get("roles"):
+                for i, r in enumerate(entry["roles"]):
+                    _role_block(r["title"], r["location_dates"], r["bullets"], before=3 if i else 0)
+            else:
+                _role_block(entry["title"], entry["location_dates"], entry["bullets"], before=0)
+
+    # Section order is level-dependent (resume-style-rules.md §3a). The competency
+    # keyword grid always sits high — it is compact, ATS-indexed, and orients a human
+    # in ten seconds. What moves is the TOOL list: at executive level the track record
+    # is the pitch, so tools follow experience; for hands-on roles the exact-tool match
+    # IS the screen, so tools lead.
+    emit = {
+        "competencies": _emit_competencies,
+        "skills": _emit_skills,
+        "experience": _emit_experience,
+    }
+    for part in SECTION_ORDERS.get(spec.get("level", DEFAULT_LEVEL), SECTION_ORDERS[DEFAULT_LEVEL]):
+        emit[part]()
 
     # Earlier Experience (optional one-line bullet per role)
     if spec.get("earlier"):
