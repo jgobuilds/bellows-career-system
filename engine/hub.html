@@ -654,6 +654,24 @@ function makeCard(ph, s, idx){
   return card;
 }
 
+// Work authorization, as STATED by the posting. Never a verdict on whether you
+// personally are eligible — that's a legal question about your status. Absent or
+// "unstated" renders nothing at all, because most postings say nothing and a blank
+// must never read as permission.
+const WA_LABEL={citizens_only:'US citizens only',no_sponsorship:'No sponsorship',sponsors:'Sponsors visas'};
+function waMeta(j){
+  const v=j.workAuth||'';
+  if(!v||v==='unstated'||!WA_LABEL[v]) return '';
+  const concern=j.workAuthConcern||'';
+  // ⚠ carries the conflict, not colour alone — this stays readable if you can't
+  // distinguish the green from the amber.
+  const col=(v==='sponsors')?'var(--good)':'var(--warn)';
+  const tip=(concern?'⚠ '+concern+' — ':'')+'Posting says: "'+(j.workAuthEvidence||'(no quote captured)')+'"';
+  return '<span class="m" title="'+esc(tip)+'" style="color:'+col+'">'+
+         '<span class="k">Work auth</span>'+(concern?'⚠ ':'')+esc(WA_LABEL[v])+'</span>';
+}
+function anyWorkAuthConcern(){ return (JOBS||[]).some(j=>j.workAuthConcern); }
+
 function kcard(j){
   const c=document.createElement('div'); c.className='kcard'; c.draggable=true; c.dataset.id=j.id;
   const g=GLASSDOOR[j.co], sal=salaryOf(j), com=commuteOf(j);
@@ -662,6 +680,7 @@ function kcard(j){
   if(sal) meta+='<span class="m"><span class="k">Sal</span>'+esc(sal.replace(/\s*\+\s*(equity|bonus)/ig,''))+'</span>';
   if(com) meta+='<span class="m" style="color:'+com[1]+'"><span class="k">Commute</span>'+esc(com[0])+'</span>';
   if(j.ats!=null) meta+='<span class="m" title="résumé↔JD keyword match" style="color:'+(j.ats>=85?'var(--good)':'#B07A00')+'"><span class="k">ATS</span>'+esc(j.ats)+'%</span>';
+  meta+=waMeta(j);
   c.innerHTML='<div class="kr">'+esc(j.role||'(role)')+'</div>'+
     '<div class="kc">'+esc(j.co||'')+(j.score?' · score '+esc(j.score):'')+'</div>'+
     (meta?'<div class="kmeta">'+meta+'</div>':'')+
@@ -673,8 +692,9 @@ function kcard(j){
   c.title='Click for detail · drag to change status';
   return c;
 }
-let FILTER={q:'',warm:false,fit:'all'};
+let FILTER={q:'',warm:false,fit:'all',waFlagged:false};
 function passFilter(j){
+  if(FILTER.waFlagged && !j.workAuthConcern) return false;
   if(FILTER.warm && !j.warm) return false;
   if(FILTER.fit!=='all' && (j.fit||'core')!==FILTER.fit) return false;
   if(FILTER.q){ const q=FILTER.q.toLowerCase(); if(!(((j.role||'')+' '+(j.co||'')).toLowerCase().includes(q))) return false; }
@@ -686,7 +706,11 @@ function renderPipeline(root){
     '<button class="sweepbtn" onclick="openSweep()">⟳ Run lead sweep</button>'+
     '<input class="fsearch" id="f-q" type="search" placeholder="Filter role or company…" value="'+esc(FILTER.q)+'">'+
     '<button class="fbtn'+(FILTER.warm?' on':'')+'" id="f-warm">🤝 Warm only</button>'+
-    '<select class="fsel" id="f-fit"><option value="all">All fits</option><option value="core">Core fit</option><option value="stretch">Stretch</option></select>';
+    '<select class="fsel" id="f-fit"><option value="all">All fits</option><option value="core">Core fit</option><option value="stretch">Stretch</option></select>'+
+    // Only rendered when something is actually flagged, so this stays invisible
+    // for anyone whose status conflicts with nothing, and for anyone who never
+    // filled in WORK_AUTH at all. No dead controls.
+    (anyWorkAuthConcern()?'<button class="fbtn'+(FILTER.waFlagged?' on':'')+'" id="f-wa" title="Postings whose stated work-authorization terms conflict with your WORK_AUTH answers">⚠ Work-auth flags</button>':'');
   root.appendChild(bar);
   const hint=document.createElement('div'); hint.className='khint';
   hint.innerHTML='Click a card for full detail · drag between columns to change status.';
@@ -695,6 +719,8 @@ function renderPipeline(root){
   const q=document.getElementById('f-q'); q.oninput=()=>{ FILTER.q=q.value; renderKanban(); };
   const wb=document.getElementById('f-warm'); wb.onclick=()=>{ FILTER.warm=!FILTER.warm; wb.classList.toggle('on',FILTER.warm); renderKanban(); };
   const fs=document.getElementById('f-fit'); fs.value=FILTER.fit; fs.onchange=()=>{ FILTER.fit=fs.value; renderKanban(); };
+  const wa=document.getElementById('f-wa');
+  if(wa) wa.onclick=()=>{ FILTER.waFlagged=!FILTER.waFlagged; wa.classList.toggle('on',FILTER.waFlagged); renderKanban(); };
   renderKanban();
 }
 function renderKanban(){   // renders columns into #kwrap only, so filter typing keeps focus

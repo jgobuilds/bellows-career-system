@@ -104,6 +104,11 @@ def main():
                 "applied": "",
                 "doc": None,
                 "url": r.get("job_url", ""),
+                # Read from the JD body during the sweep. Absent on rows added
+                # before this existed, and the dashboard treats absent as "unstated".
+                "workAuth": r.get("work_auth", "") or "",
+                "workAuthConcern": r.get("work_auth_concern", "") or "",
+                "workAuthEvidence": r.get("work_auth_evidence", "") or "",
             },
             "pipeline": {"why_short": "", "flags": "", "date_added": today, "detail_block": ""},
             "_lead": {
