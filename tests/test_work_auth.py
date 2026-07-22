@@ -300,5 +300,48 @@ class TestConfigRewrite(unittest.TestCase):
             ast.parse(work_auth.render_config_block(status))
 
 
+class TestRelevanceGating(unittest.TestCase):
+    """A verdict is a fact about the POSTING, so it never changes when your status
+    does. Rendering it unconditionally meant a citizen saw "No sponsorship" chips
+    permanently, and made the dropdown look broken: switching back to citizen left
+    the label sitting there, because it was never about you."""
+
+    def _f(self, verdict):
+        return work_auth.Finding(verdict, "evidence")
+
+    def test_a_citizen_sees_nothing(self):
+        me = work_auth.STATUSES["citizen"]
+        for verdict in ("citizens_only", "no_sponsorship", "sponsors"):
+            self.assertFalse(work_auth.is_relevant(self._f(verdict), me), verdict)
+
+    def test_a_permanent_resident_sees_only_citizens_only(self):
+        me = work_auth.STATUSES["permanent_resident"]
+        self.assertTrue(work_auth.is_relevant(self._f("citizens_only"), me))
+        self.assertFalse(work_auth.is_relevant(self._f("no_sponsorship"), me))
+        self.assertFalse(work_auth.is_relevant(self._f("sponsors"), me))
+
+    def test_someone_needing_sponsorship_sees_all_three(self):
+        me = work_auth.STATUSES["needs_sponsorship"]
+        for verdict in ("citizens_only", "no_sponsorship", "sponsors"):
+            self.assertTrue(work_auth.is_relevant(self._f(verdict), me), verdict)
+
+    def test_unset_is_silent_because_the_feature_is_opt_in(self):
+        for verdict in ("citizens_only", "no_sponsorship", "sponsors"):
+            self.assertFalse(work_auth.is_relevant(self._f(verdict), None))
+            self.assertFalse(work_auth.is_relevant(self._f(verdict), work_auth.STATUSES["unset"]))
+
+    def test_unstated_is_never_relevant(self):
+        for key in work_auth.STATUSES:
+            self.assertFalse(
+                work_auth.is_relevant(work_auth.Finding("unstated", ""), work_auth.STATUSES[key])
+            )
+
+    def test_switching_back_to_citizen_clears_the_chip(self):
+        # the reported bug, as an assertion
+        f = self._f("no_sponsorship")
+        self.assertTrue(work_auth.is_relevant(f, work_auth.STATUSES["needs_sponsorship"]))
+        self.assertFalse(work_auth.is_relevant(f, work_auth.STATUSES["citizen"]))
+
+
 if __name__ == "__main__":
     unittest.main()
