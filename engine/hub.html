@@ -14,13 +14,19 @@
     --paper:#ffffff; --bg:#f5f7fa; --ink:#1a2733; --grey:#5b6b7a; --line:#e3e9f0;
     --good:#0F6E56; --warn:#8A5A00; --orange:#E69F00; --chip:#eef4fa;
     --radius:14px;
+    /* native <select> popups and scrollbars follow this; CSS on the closed
+       control cannot reach the popup list. */
+    color-scheme: light;
     /* aliases matching the board's palette names, so ported board CSS works unchanged */
     --blue-1:#0072B2; --blue-2:#56B4E9; --grey-1:#5b6b7a; --grey-2:#1a2733;
     --mist:#f5f9fc; --ok:#0F6E56; --ok-bg:#E1F5EE; --warm:#8A5A00; --warm-bg:#FAEEDA; --orange-1:#E69F00;
   }
   @media (prefers-color-scheme: dark){
-    :root{--paper:#141b22;--bg:#0d1319;--ink:#e6edf3;--grey:#9fb0c0;--line:#26313d;--chip:#1b2530;--orange:#F6B64C;
-      --grey-1:#9fb0c0; --grey-2:#e6edf3; --mist:#171f27; --ok:#4ec08a; --ok-bg:rgba(15,110,86,.2); --warm:#e0a53c; --warm-bg:rgba(133,79,11,.22); --blue-ink:#4a9fd6;}
+    :root{color-scheme: dark; --paper:#141b22;--bg:#0d1319;--ink:#e6edf3;--grey:#9fb0c0;--line:#26313d;--chip:#1b2530;--orange:#F6B64C;
+      --grey-1:#9fb0c0; --grey-2:#e6edf3; --mist:#171f27; --ok:#4ec08a; --ok-bg:rgba(15,110,86,.2); --warm:#e0a53c; --warm-bg:rgba(133,79,11,.22); --blue-ink:#4a9fd6;
+      /* --good/--warn are the same semantic pair as --ok/--warm and were missing
+         here, so every consumer of them rendered dark-on-dark. */
+      --good:#4ec08a; --warn:#e0a53c;}
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;}
@@ -56,7 +62,7 @@
   .profile .pc-row{display:flex;gap:8px;align-items:baseline;font-size:12.5px;}
   .profile .pc-k{flex:0 0 42px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--grey);font-weight:700;padding-top:1px;}
   .profile .pc-v{color:var(--ink);font-weight:600;min-width:0;}
-  .profile .pc-sel{font:inherit;font-size:11.5px;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 4px;max-width:150px;cursor:pointer;}
+  .profile .pc-sel{font:inherit;font-size:11.5px;font-weight:600;color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:2px 4px;max-width:150px;cursor:pointer;}
   .profile .pc-sel.flag{border-color:var(--warn);color:var(--warn);}
   @media(max-width:640px){ .profile{width:100%;border-right:none;border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0;} }
   .stats{display:flex;flex-wrap:wrap;gap:22px;}
