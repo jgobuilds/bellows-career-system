@@ -151,6 +151,7 @@ def _all_roles(spec):
     roles: list[dict] = []
     for e in spec.get("experience", []):
         roles.extend(e["roles"] if e.get("roles") else [e])
+    roles.extend(spec.get("advisory", []))
     roles.extend(spec.get("earlier", []))
     return roles
 
@@ -363,6 +364,21 @@ def build_resume(spec, out_path):
     }
     for part in cfg["order"]:
         emit[part]()
+        if part == "experience" and spec.get("advisory"):
+            # Concurrent fractional / advisory work lives in its OWN section, out of
+            # the main reverse-chron timeline. Two reasons, one craft and one
+            # mechanical: it is the conventional way to show work that overlaps a
+            # primary role, and it keeps an entry whose dates sit inside the current
+            # job's window from being folded into that job by a résumé parser
+            # (observed on Workday, 2026-07-22 — the merge that a relabel could not
+            # fix, because the trigger was the date overlap, not the company name).
+            _section(d, "Advisory & Consulting")
+            for entry in spec["advisory"]:
+                _run(_para(d, before=6), entry["company"], bold=True, size=11)
+                _run(_para(d), entry["title"], bold=True)
+                _run(_para(d, after=1), entry["location_dates"])
+                for lead, rest in entry.get("bullets", []):
+                    _bullet(d, lead, rest)
         if part == "experience" and spec.get("earlier"):
             # Earlier Experience always trails the main experience block, wherever it sits.
             _section(d, "Earlier Experience")
