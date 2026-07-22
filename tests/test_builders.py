@@ -306,9 +306,7 @@ class TestAdvisorySection(unittest.TestCase):
         spec = self._spec()
         del spec["advisory"]
         # still valid, still builds — the feature is purely additive
-        self.assertEqual(
-            [w for w in resume_builder.validate(spec) if "chronological" in w], []
-        )
+        self.assertEqual([w for w in resume_builder.validate(spec) if "chronological" in w], [])
 
 
 if __name__ == "__main__":
