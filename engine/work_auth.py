@@ -263,6 +263,34 @@ def rewrite_config(text: str, status: str) -> str:
     return text.rstrip() + "\n\n" + block + "\n"
 
 
+def is_relevant(finding: Finding, work_auth: dict[str, object] | None) -> bool:
+    """Whether a stated verdict is worth showing THIS person at all.
+
+    A posting's verdict is a fact about the posting, not about you, so it never
+    changes when your status does. Showing it unconditionally means a US citizen
+    sees "No sponsorship" chips forever: true, unactionable, and pure noise. Worse,
+    it makes the dropdown look broken — switch back to citizen and the label stays,
+    because it was never about you.
+
+    So the chip is gated on relevance:
+        citizens_only    matters unless you are a citizen
+        no_sponsorship   matters only if you need sponsorship
+        sponsors         matters only if you need sponsorship (it is good news
+                         for that person and irrelevant to everyone else)
+
+    With no status captured the feature is off, and off means silent.
+    """
+    if not finding.is_stated or not work_auth:
+        return False
+    needs_sponsorship = bool(work_auth.get("needs_sponsorship"))
+    is_citizen = str(work_auth.get("citizenship") or "").lower() == "citizen"
+    if finding.verdict == "citizens_only":
+        return not is_citizen
+    if finding.verdict in ("no_sponsorship", "sponsors"):
+        return needs_sponsorship
+    return False
+
+
 def label(verdict: Verdict) -> str:
     """Short display text for a chip or a CSV column."""
     return {

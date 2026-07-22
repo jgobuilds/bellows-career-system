@@ -689,6 +689,22 @@ const WA_LABEL={citizens_only:'US citizens only',no_sponsorship:'No sponsorship'
 // display time, so changing the dropdown re-flags every card instantly and no
 // stored row can go stale. Mirrors work_auth.concern() in Python — keep in step.
 function myWorkAuth(){ return (STATUS&&STATUS.profile&&STATUS.profile.work_auth)||'unset'; }
+// Whether a stated verdict is worth showing YOU. A posting's verdict is a fact
+// about the posting and never changes when your status does, so rendering it
+// unconditionally meant a US citizen saw 'No sponsorship' chips permanently -
+// true, unactionable, and it made the dropdown look broken: switch back to
+// citizen and the label stayed, because it was never about you.
+// Mirrors work_auth.is_relevant() in Python - keep the two in step.
+function waRelevant(j){
+  const v=j.workAuth||'';
+  if(!v||v==='unstated') return false;
+  const me=myWorkAuth();
+  if(me==='unset') return false;                       // opt-in, and not opted in
+  if(v==='citizens_only')  return me!=='citizen';
+  if(v==='no_sponsorship') return me==='needs_sponsorship';
+  if(v==='sponsors')       return me==='needs_sponsorship';
+  return false;
+}
 function waConcern(j){
   const v=j.workAuth||'';
   if(!v||v==='unstated') return '';
@@ -701,6 +717,7 @@ function waConcern(j){
 function waMeta(j){
   const v=j.workAuth||'';
   if(!v||v==='unstated'||!WA_LABEL[v]) return '';
+  if(!waRelevant(j)) return '';   // stated, but not about you
   const concern=waConcern(j);
   // ⚠ carries the conflict, not colour alone — this stays readable if you can't
   // distinguish the green from the amber.

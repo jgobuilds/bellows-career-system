@@ -1,5 +1,10 @@
 # Local quality gate — runs before every commit so problems never reach CI.
-# Install once per clone:  pre-commit install
+# Install once per clone:  pre-commit install --hook-type pre-commit --hook-type pre-push
+#
+# The pre-PUSH hook is the important one. Your local test run uses YOUR filled-in
+# personal/userconfig.py; CI scaffolds the blank template. A test that quietly
+# depends on your config passes here and fails there, every time. That shipped
+# twice. tools/ci_local.py runs the gate in CI's environment instead of yours.
 # (mypy runs in CI, not here — it needs the project deps + scaffolded config that
 #  pre-commit's isolated envs don't have.)
 minimum_pre_commit_version: "3.5.0"
@@ -21,3 +26,13 @@ repos:
       - id: ruff                       # lint against pyproject.toml's [tool.ruff]
         args: [--fix]
       - id: ruff-format                # format (black-compatible)
+
+  - repo: local
+    hooks:
+      - id: ci-local
+        name: CI gate in CI's environment (template config, tracked tree)
+        entry: python tools/ci_local.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
