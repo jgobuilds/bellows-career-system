@@ -83,6 +83,7 @@ MAX_WORKERS = 6
 # 'status' is informational: "validated" (feed confirmed) vs "verify" (guess -
 # will 404 harmlessly if wrong; confirm and mark validated when it returns data).
 # ---------------------------------------------------------------------------
+import cadence
 import config as CFG
 import work_auth
 
@@ -100,6 +101,7 @@ WORKDAY_QUERIES = CFG.WORKDAY_QUERIES
 # config since the last run gets its FULL history window (never swept before).
 # ---------------------------------------------------------------------------
 STATE_FILE = os.path.join(CFG.DATA_DIR, "sweep_state.json")
+CADENCE_FILE = os.path.join(CFG.DATA_DIR, "posting_cadence.json")
 LAST_SWEEP_META: dict[str, object] = {}  # populated by sweep(): {days_since, new_companies, delta}
 
 
@@ -542,7 +544,7 @@ def _poll_company(c, lane_ok, opts):
     key = _company_key(c)
     is_new = key not in opts["last"]
     since, verbose = opts["since"], opts["verbose"]
-    result = {"key": key, "is_new": is_new, "rows": [], "outcome": "ok"}
+    result = {"key": key, "is_new": is_new, "rows": [], "outcome": "ok", "obs": None}
 
     def say(msg):
         if verbose:
@@ -575,6 +577,11 @@ def _poll_company(c, lane_ok, opts):
         say(f"  - {c['ats']}:{_label(c)} error: {e} (skip)")
         result["outcome"] = "error"
         return result
+
+    # The whole board, BEFORE the lane filter discards most of it. Every ATS
+    # fetcher already pulls all open postings with real dates, so cadence needs
+    # no history — it was simply being deleted a few lines later.
+    result["obs"] = cadence.observe(c["ats"], rows)
 
     for r in rows:
         if not r["title"]:
@@ -679,7 +686,12 @@ def sweep(
         with ThreadPoolExecutor(max_workers=min(len(groups), workers)) as pool:
             results = [r for batch in pool.map(_run_group, groups.values()) for r in batch]
 
+    cad = cadence.load(CADENCE_FILE)
+    arrivals = 0
     for r in results:
+        if r["obs"]:
+            # merged here, single-threaded, so observe() can stay lock-free
+            arrivals += len(cadence.record(cad, r["key"], r["obs"]))
         checked += 1
         _cur_keys.append(r["key"])
         if r["is_new"]:
@@ -689,6 +701,11 @@ def sweep(
         elif r["outcome"] == "error":
             errors += 1
         kept.extend(r["rows"])
+
+    try:
+        cadence.save(CADENCE_FILE, cad)
+    except OSError as e:  # non-fatal: cadence is an optimisation, not the job
+        print(f"  ! couldn't save posting cadence ({e})", file=sys.stderr)
 
     _save_state(_cur_keys)
     LAST_SWEEP_META.clear()
