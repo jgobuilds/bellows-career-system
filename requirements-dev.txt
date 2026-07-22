@@ -3,4 +3,5 @@
 ruff>=0.6            # lint + format (config in pyproject.toml [tool.ruff])
 mypy>=1.8            # type check — informational until the engine is packaged (H2)
 pre-commit>=3.5      # local git hooks (.pre-commit-config.yaml)
+pip-audit>=2.7       # dependency CVE audit against the OSV/PyPI advisory DB (CI gate)
 # Tests are stdlib unittest (no pytest needed): python -m unittest discover -s tests

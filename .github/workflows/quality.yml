@@ -47,3 +47,19 @@ jobs:
 
       - name: Type check (mypy)
         run: mypy engine
+
+      # Dependency CVE audit. Gates on any KNOWN vulnerability in the resolved
+      # tree, so a new advisory turns CI red loudly rather than sitting unnoticed.
+      #
+      # Justified ignore (same discipline as the bandit S-rule exceptions in
+      # pyproject.toml — an exception tied to the threat model, not a silenced
+      # warning):
+      #   PYSEC-2026-1604 — markdownify <0.14.1 memory-consumption DoS via
+      #   oversized <h9999999> headlines. The fix (0.14.1) is BLOCKED upstream:
+      #   python-jobspy 1.1.82 pins markdownify<0.14.0, so we cannot bump it
+      #   without breaking jobspy. Blast radius is low — a local, single-user
+      #   tool would have to scrape a maliciously-crafted job posting to trigger
+      #   extra memory use in one run. Revisit when python-jobspy relaxes its
+      #   <0.14 upper pin, then drop this ignore and let the bump flow through.
+      - name: Dependency audit (pip-audit)
+        run: pip-audit --ignore-vuln PYSEC-2026-1604
