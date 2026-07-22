@@ -12,8 +12,11 @@ trying to stop.
 
 import os
 import sys
+import threading
+import time
 import unittest
 from itertools import pairwise
+from typing import ClassVar
 from unittest.mock import patch
 
 sys.path.insert(
@@ -166,3 +169,111 @@ class TestRateLimitIsNotAnError(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestParallelByAts(unittest.TestCase):
+    """Running one worker per ATS must not raise the per-DOMAIN request rate.
+
+    That is the whole safety claim of the parallel path: concurrency across hosts,
+    never within one. If this regresses, the sweep gets faster and starts getting
+    blocked, which is the opposite of what it was built for.
+    """
+
+    URLS: ClassVar[dict[str, str]] = {
+        "greenhouse": "https://boards-api.greenhouse.io/{}",
+        "workday": "https://{}.wd5.myworkdayjobs.com/x",
+        "ashby": "https://api.ashbyhq.com/{}",
+    }
+
+    def _harness(self):
+        companies = (
+            [{"ats": "greenhouse", "slug": f"g{i}"} for i in range(6)]
+            + [{"ats": "workday", "tenant": f"w{i}", "wd": "wd5", "site": "S"} for i in range(5)]
+            + [{"ats": "ashby", "slug": f"a{i}"} for i in range(3)]
+        )
+        hits, lock = [], threading.Lock()
+
+        def make(ats):
+            def fetch(c):
+                url = self.URLS[ats].format(c.get("slug") or c.get("tenant"))
+                domain = ats_sweep._throttle(url)
+                with lock:
+                    hits.append((time.monotonic(), domain))
+                return [
+                    {
+                        "title": "Director of Data",
+                        "location": "Remote",
+                        "is_remote": True,
+                        "age_days": 1,
+                        "company": c.get("slug") or c.get("tenant"),
+                        "description": "nothing relevant",
+                        "industry": "x",
+                        "job_url": "https://example.com",
+                        "date_posted": "2026-07-01",
+                        "site": ats,
+                    }
+                ]
+
+            return fetch
+
+        return companies, hits, {k: make(k) for k in self.URLS}
+
+    def _run(self, workers):
+        companies, hits, fetchers = self._harness()
+        with (
+            patch.object(ats_sweep, "COMPANIES", companies),
+            patch.object(ats_sweep, "FETCHERS", fetchers),
+            patch.object(ats_sweep, "_save_state", lambda keys: None),
+            patch.object(ats_sweep, "PER_CALL_PAUSE", 0.02),
+            patch.object(ats_sweep, "JITTER", 0.005),
+        ):
+            ats_sweep._LAST_HIT.clear()
+            rows = ats_sweep.sweep(verbose=False, workers=workers, delta=False)
+            ats_sweep._LAST_HIT.clear()
+        return rows, hits
+
+    def test_parallel_never_beats_the_per_domain_floor(self):
+        _, hits = self._run(workers=6)
+        last, tightest = {}, {}
+        for t, d in sorted(hits):
+            if d in last:
+                tightest[d] = min(tightest.get(d, 1e9), t - last[d])
+            last[d] = t
+        self.assertTrue(tightest, "no repeat requests recorded — harness is not exercising it")
+        for domain, gap in tightest.items():
+            self.assertGreaterEqual(
+                gap,
+                0.02 * 0.9,  # 10% slack for scheduler noise
+                f"{domain}: requests {gap:.4f}s apart, floor is 0.02s",
+            )
+
+    def test_parallel_and_serial_return_the_same_rows(self):
+        serial, _ = self._run(workers=1)
+        parallel, _ = self._run(workers=6)
+        key = lambda rows: sorted((r["company"], r["title"]) for r in rows)  # noqa: E731
+        self.assertEqual(key(serial), key(parallel))
+        self.assertEqual(len(serial), 14)
+
+    def test_every_company_is_polled_exactly_once(self):
+        _, hits = self._run(workers=6)
+        self.assertEqual(len(hits), 14)
+
+    def test_one_failing_ats_does_not_sink_the_others(self):
+        companies, _, fetchers = self._harness()
+
+        def boom(c):
+            raise RuntimeError("feed down")
+
+        fetchers["workday"] = boom
+        with (
+            patch.object(ats_sweep, "COMPANIES", companies),
+            patch.object(ats_sweep, "FETCHERS", fetchers),
+            patch.object(ats_sweep, "_save_state", lambda keys: None),
+            patch.object(ats_sweep, "PER_CALL_PAUSE", 0.01),
+            patch.object(ats_sweep, "JITTER", 0.002),
+        ):
+            ats_sweep._LAST_HIT.clear()
+            rows = ats_sweep.sweep(verbose=False, workers=6, delta=False)
+            ats_sweep._LAST_HIT.clear()
+        # greenhouse (6) + ashby (3) still land; workday's 5 are lost, not fatal
+        self.assertEqual(len(rows), 9)
