@@ -238,7 +238,6 @@ def score_file(in_csv=None, out_csv=None, pipeline_md=None):
                 # Carried, not computed: ats_sweep is the only stage that sees a JD
                 # body, so these ride through rather than being re-derived here.
                 "work_auth": (r.get("work_auth") or "unstated").strip(),
-                "work_auth_concern": (r.get("work_auth_concern") or "").strip(),
                 "work_auth_evidence": (r.get("work_auth_evidence") or "").strip(),
             }
         )
@@ -257,7 +256,6 @@ def score_file(in_csv=None, out_csv=None, pipeline_md=None):
                 "why",
                 "job_url",
                 "work_auth",
-                "work_auth_concern",
                 "work_auth_evidence",
             ],
         )

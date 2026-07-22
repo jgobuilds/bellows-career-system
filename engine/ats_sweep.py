@@ -493,10 +493,14 @@ def sweep(
             # is the only place in the pipeline that can read them. Only the compact
             # verdict travels downstream; the description itself is not persisted
             # past the sweep CSV.
+            #
+            # What the POSTING requires is a durable fact, so it is stored. Whether
+            # that conflicts with YOU is not stored: your status changes, and a baked
+            # comparison would leave every existing row silently stale. The dashboard
+            # compares at display time against the current setting.
             _wa = work_auth.classify(r.get("description"))
             r["work_auth"] = _wa.verdict
             r["work_auth_evidence"] = _wa.evidence
-            r["work_auth_concern"] = work_auth.concern(_wa, getattr(CFG, "WORK_AUTH", None)) or ""
             r["search"] = r.pop("industry", "")  # reuse 'search' col to carry industry
             kept.append(r)
             hits += 1
@@ -543,7 +547,6 @@ CSV_COLS = [
     "job_url",
     "search",
     "work_auth",
-    "work_auth_concern",
     "work_auth_evidence",
     "description",
 ]

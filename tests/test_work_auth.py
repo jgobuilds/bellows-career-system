@@ -202,3 +202,81 @@ class TestLabels(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUserStatus(unittest.TestCase):
+    """The user's own status is a NAMED key, so the dashboard dropdown,
+    userconfig.py, and concern() cannot drift apart."""
+
+    def test_every_status_maps_back_to_its_key(self):
+        for key, value in work_auth.STATUSES.items():
+            self.assertEqual(work_auth.status_key(value), key)
+
+    def test_unset_and_empty_are_unset(self):
+        self.assertEqual(work_auth.status_key(None), "unset")
+        self.assertEqual(work_auth.status_key({}), "unset")
+
+    def test_hand_edited_dict_still_classifies(self):
+        # someone edits userconfig.py by hand into a shape matching no preset
+        odd = {"authorized_us": True, "needs_sponsorship": True, "citizenship": "citizen"}
+        self.assertEqual(work_auth.status_key(odd), "needs_sponsorship")
+
+    def test_every_status_has_a_label(self):
+        self.assertEqual(set(work_auth.STATUS_LABELS), set(work_auth.STATUSES))
+
+
+class TestConfigRewrite(unittest.TestCase):
+    """Pure, because a botched rewrite would break the one file the whole system
+    reads. Two real bugs were caught here: the round-trip stripped the inline
+    comments, and the writer flipped every line in the file to CRLF."""
+
+    SRC = (
+        "NAME = 'x'\n\n"
+        "WORK_AUTH = {\n"
+        '    "authorized_us": True,       # legally authorized to work in the US?\n'
+        '    "needs_sponsorship": False,  # will you need sponsorship now or in the future?\n'
+        '    "citizenship": "citizen",    # "citizen" | "permanent_resident" | "other"\n'
+        "}\n\n"
+        "LANE_STRONG = ['a']\n"
+    )
+
+    def test_round_trip_is_byte_identical(self):
+        out = work_auth.rewrite_config(self.SRC, "needs_sponsorship")
+        out = work_auth.rewrite_config(out, "citizen")
+        self.assertEqual(out, self.SRC)
+
+    def test_inline_comments_survive(self):
+        out = work_auth.rewrite_config(self.SRC, "needs_sponsorship")
+        self.assertIn("# legally authorized to work in the US?", out)
+        self.assertIn('# "citizen" | "permanent_resident" | "other"', out)
+
+    def test_only_the_assignment_changes(self):
+        out = work_auth.rewrite_config(self.SRC, "permanent_resident")
+        self.assertTrue(out.startswith("NAME = 'x'\n\n"))
+        self.assertTrue(out.endswith("LANE_STRONG = ['a']\n"))
+        self.assertIn('"citizenship": "permanent_resident"', out)
+
+    def test_none_and_back(self):
+        off = work_auth.rewrite_config(self.SRC, "unset")
+        self.assertIn("WORK_AUTH = None", off)
+        self.assertNotIn('"citizenship"', off)
+        back = work_auth.rewrite_config(off, "citizen")
+        self.assertEqual(back, self.SRC)
+
+    def test_appends_when_absent(self):
+        out = work_auth.rewrite_config("NAME = 'x'\n", "citizen")
+        self.assertIn("WORK_AUTH = {", out)
+        self.assertTrue(out.startswith("NAME = 'x'\n"))
+
+    def test_no_carriage_returns_introduced(self):
+        self.assertNotIn("\r", work_auth.rewrite_config(self.SRC, "needs_sponsorship"))
+
+    def test_unknown_status_raises(self):
+        with self.assertRaises(ValueError):
+            work_auth.rewrite_config(self.SRC, "resident alien of mars")
+
+    def test_written_block_is_valid_python(self):
+        import ast
+
+        for status in work_auth.STATUSES:
+            ast.parse(work_auth.render_config_block(status))

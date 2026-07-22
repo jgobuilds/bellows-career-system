@@ -141,20 +141,25 @@ class TestWorkAuthCarryThrough(unittest.TestCase):
         out = self._run(
             {
                 "work_auth": "no_sponsorship",
-                "work_auth_concern": "posting states it does not sponsor",
                 "work_auth_evidence": "we are unable to offer visa sponsorship",
             }
         )
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["work_auth"], "no_sponsorship")
-        self.assertIn("does not sponsor", out[0]["work_auth_concern"])
         self.assertIn("unable to offer", out[0]["work_auth_evidence"])
 
     def test_missing_columns_default_to_unstated(self):
         # rows swept before the feature existed must not blow up or imply permission
         out = self._run({})
         self.assertEqual(out[0]["work_auth"], "unstated")
-        self.assertEqual(out[0]["work_auth_concern"], "")
+
+    def test_the_user_vs_posting_comparison_is_never_persisted(self):
+        # It is derived from a setting that changes. Storing it would leave every
+        # existing row stale the moment the user updates their status, and would
+        # make the dashboard's live switching impossible.
+        out = self._run({"work_auth": "no_sponsorship", "work_auth_evidence": "cannot sponsor"})
+        self.assertNotIn("work_auth_concern", out[0])
+        self.assertNotIn("work_auth_concern", lead_score.__dict__.get("_", {}))
 
 
 if __name__ == "__main__":

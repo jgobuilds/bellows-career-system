@@ -37,6 +37,7 @@ from urllib.parse import quote
 
 import _paths  # noqa: F401  (side-effect: adds repo root to sys.path for `import config`)
 import config  # file paths (all under personal/) + the shared dashboard shell in engine/
+import work_auth  # posting work-auth verdicts + the user's own status
 from ats_url import ats_url_for  # company -> ATS careers board
 
 PORT = int(os.environ.get("SWEEP_PORT", "8765"))
@@ -272,6 +273,12 @@ def profile_summary():
         "target_title": titles[0] if titles else "",
         "target_comp": _fmt_comp(getattr(config, "COMP_TARGET", None) or []),
         "metro": getattr(config, "HOME_METRO", "") or "",
+        # The user's own work-auth status, as a named key. Sent to the dashboard
+        # so the posting-vs-you comparison can happen at DISPLAY time — it is
+        # deliberately not baked into stored job records, which would go stale
+        # the moment this changes.
+        "work_auth": work_auth.status_key(getattr(config, "WORK_AUTH", None)),
+        "work_auth_options": [{"key": k, "label": v} for k, v in work_auth.STATUS_LABELS.items()],
     }
 
 
@@ -299,9 +306,29 @@ def set_voice(voice):
     new = re.sub(r'COACH_VOICE\s*=\s*"[^"]*"', 'COACH_VOICE = "%s"' % voice, txt)
     if new == txt:  # no existing setting — append one
         new = txt.rstrip() + '\n\nCOACH_VOICE = "%s"\n' % voice
-    open(uc, "w", encoding="utf-8").write(new)
+    with open(uc, "w", encoding="utf-8", newline="") as fh:  # keep the file's LF endings
+        fh.write(new)
     config.COACH_VOICE = voice  # reflect in the running process
     return voice
+
+
+def set_work_auth(status):
+    """Persist the user's work-auth status to personal/userconfig.py."""
+    status = (status or "").strip()
+    if status not in work_auth.STATUSES:
+        raise ValueError("unknown work-auth status '%s'" % status)
+    uc = os.path.join(PERSONAL_DIR, "userconfig.py")
+    txt = open(uc, encoding="utf-8").read()
+    # newline="" or Python rewrites every line ending to CRLF on Windows, churning
+    # all 326 lines of the file on a one-line change.
+    with open(uc, "w", encoding="utf-8", newline="") as fh:
+        fh.write(work_auth.rewrite_config(txt, status))
+    # Reflect in the running process. setattr, not direct assignment: mypy infers
+    # config.WORK_AUTH's type from whatever dict the user's own config happens to
+    # hold, so it believes the attribute can never be None — but selecting "unset"
+    # legitimately sets it to None. The type is genuinely dynamic here.
+    setattr(config, "WORK_AUTH", work_auth.STATUSES[status])  # noqa: B010
+    return status
 
 
 def set_status(job_id, status):
@@ -514,6 +541,15 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(400, {"ok": False, "error": str(e)})
             return self._json(200, {"ok": True, **res})
+
+        if path == "/api/set-work-auth":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+                res = set_work_auth(body.get("status"))
+            except Exception as e:
+                return self._json(400, {"ok": False, "error": str(e)})
+            return self._json(200, {"ok": True, "work_auth": res})
 
         if path == "/api/set-voice":
             length = int(self.headers.get("Content-Length") or 0)
