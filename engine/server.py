@@ -178,6 +178,10 @@ STATUS_ARTIFACTS = {
     "references": "references.md",
     "writing_style": "writing-style.md",
     "reconnect": "reconnect-list.md",
+    # A receipt, not the export: Connections.csv is third-party PII and is not
+    # retained. Without this the import step had no artifact at all, so it could
+    # never register as done however many times you ran it.
+    "linkedin_connections": os.path.join("linkedin", "connections-import.json"),
     "infointerview": "informational-interviews.md",
 }
 

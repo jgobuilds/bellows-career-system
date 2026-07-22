@@ -320,6 +320,9 @@
       <li>In LinkedIn: <b>Settings &amp; Privacy → Data Privacy → Get a copy of your data</b> → check <b>Connections</b> → <b>Request archive</b>.</li>
       <li>Wait for the email (usually ~10 min), then download <code>Connections.csv</code>.</li>
       <li>Drop <code>Connections.csv</code> into <b>personal/linkedin/</b>.</li>
+      <li>Once processed, delete the CSV. It is a large file of other people's names,
+          titles and employers, and nothing downstream needs it. A dated receipt
+          (<code>connections-import.json</code>) records that the import happened.</li>
       <li>Then run it below — I'll rank who to reconnect with and flag anyone at your pipeline companies.</li>
     </ol>
     <button class="sweepbtn" style="width:100%;justify-content:center" onclick="handoff('process my LinkedIn connections'); closeLinkedIn();">Copy “process my LinkedIn connections” →</button>
@@ -343,7 +346,7 @@ const PHASES = [
     {id:'accountability', name:'Weekly check-in', art:'accountability', recurring:true, cadenceDays:7, desc:'Targets vs. actuals from your board, blockers, next week.', prompt:"Let's do my weekly check-in."},
   ]},
   {key:'networking', title:'Networking', cadence:'ongoing — the highest-yield channel', skills:[
-    {id:'linkedin-import', name:'Import LinkedIn connections', modal:'linkedin', desc:'Turn your network into ranked warm leads — via LinkedIn\'s own export, no scraping.', prompt:'process my LinkedIn connections'},
+    {id:'linkedin-import', name:'Import LinkedIn connections', modal:'linkedin', art:'linkedin_connections', desc:'Turn your network into ranked warm leads — via LinkedIn\'s own export, no scraping.', prompt:'process my LinkedIn connections'},
     {id:'informational-interview', name:'Informational interviews', art:'infointerview', desc:'Coffee chats that build advocates and referrals (never ask for a job).', prompt:'Help me plan informational interviews — who should I talk to and what do I ask?'},
     {id:'network', name:'Network & outreach', art:'reconnect', desc:'Who to reach out to (ranked), the message in your voice, and your references.', prompt:'Help me with my network — who should I reach out to, and draft the message.'},
   ]},
