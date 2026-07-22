@@ -95,6 +95,35 @@ class TestMultiLocationPostings(unittest.TestCase):
         self.assertIn("multi-location", reason)
         self.assertNotIn("off-geo", reason)
 
+    def test_a_country_token_is_not_an_in_range_option(self):
+        """Regression, caught on real swept data.
+
+        "Seattle, Washington, United States" matched GEO_OK on the country, so it
+        looked like a multi-location posting and escaped the exclusion — scoring
+        Keep/8 for someone who will not relocate. Every excluded city that spells
+        out its country did the same, while "Seattle, WA, US" was handled correctly.
+        """
+        spelled_out = _geo_reason("Seattle, Washington, United States")
+        abbreviated = _geo_reason("Seattle, WA, US")
+        self.assertIn("off-geo", spelled_out)
+        self.assertNotIn("multi-location", spelled_out)
+        self.assertIn("off-geo", abbreviated)
+
+    def test_an_excluded_city_cannot_be_a_keep(self):
+        for loc in ("Seattle, Washington, United States", "Austin, TX, United States"):
+            _, bucket, _ = lead_score.score_row("Director of Data Governance", loc)
+            self.assertNotEqual(bucket, "Keep", loc)
+
+    def test_a_genuine_multi_location_still_qualifies(self):
+        # the branch must keep working for real cases: a specific in-range city
+        reason = _geo_reason("San Francisco, CA | New York City, NY")
+        self.assertIn("multi-location", reason)
+
+    def test_country_only_still_scores(self):
+        # a US-wide posting is plausible on its own; it just isn't EVIDENCE of an
+        # in-range option when an excluded city is also present
+        self.assertNotIn("off-geo", _geo_reason("United States"))
+
     def test_in_range_alone_is_home_range(self):
         place = _in_range_place()
         if not place:

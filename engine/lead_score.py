@@ -88,8 +88,25 @@ def _places(terms):
     return [t for t in terms if t.strip().lower() not in drop]
 
 
+# Country/scope tokens. They can carry a role on their own ("United States" alone
+# is plausibly a US-wide posting), but they are NOT evidence that an in-range
+# OPTION is on the table. Without this split, "Seattle, Washington, United States"
+# matched GEO_OK on the country, looked like a multi-location posting, and escaped
+# the exclusion entirely — a Seattle role scored Keep/8 for someone who will not
+# relocate. Any excluded city that spells out its country did the same.
+_BROAD = {"united states", "usa", "us", "u.s.", "u.s.a.", "nationwide", "anywhere", "global"}
+
+
+def _specific(terms):
+    """Places precise enough to mean 'you could actually work from here'."""
+    return [t for t in terms if t.strip().lower() not in _BROAD]
+
+
 GEO_GOOD = CFG.terms_to_regex(_places(CFG.GEO_GOOD))
 GEO_OK = CFG.terms_to_regex(_places(CFG.GEO_OK))
+# Used only for the multi-location test, never for scoring on its own.
+GEO_OK_SPECIFIC = CFG.terms_to_regex(_specific(_places(CFG.GEO_OK)))
+GEO_GOOD_SPECIFIC = CFG.terms_to_regex(_specific(_places(CFG.GEO_GOOD)))
 GEO_REMOTE = CFG.terms_to_regex(_remote_terms)
 # Places you will not go. Checked against remote too: "remote" is only as good as
 # the country qualifying it. Empty by default, so existing configs are unaffected.
@@ -166,9 +183,11 @@ def score_row(title, location):
     elif has_ok and not excluded:
         geo = 1
         reasons.append("commutable-ish")
-    elif has_good or has_ok:
-        # An out-of-range place AND an in-range one — a multi-location posting.
-        # Worth a look, but it can't be a 2: the in-range office may not be hiring.
+    elif GEO_GOOD_SPECIFIC.search(loc) or GEO_OK_SPECIFIC.search(loc):
+        # An out-of-range place AND a SPECIFIC in-range one — a real multi-location
+        # posting ("San Francisco, CA | New York City"). The specificity matters:
+        # matching on a country token here let every excluded city that spelled out
+        # "United States" pose as multi-location and dodge the exclusion.
         geo = 1
         reasons.append("multi-location: in-range option listed, verify")
     else:
