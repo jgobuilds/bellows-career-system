@@ -56,6 +56,8 @@
   .profile .pc-row{display:flex;gap:8px;align-items:baseline;font-size:12.5px;}
   .profile .pc-k{flex:0 0 42px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--grey);font-weight:700;padding-top:1px;}
   .profile .pc-v{color:var(--ink);font-weight:600;min-width:0;}
+  .profile .pc-sel{font:inherit;font-size:11.5px;font-weight:600;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 4px;max-width:150px;cursor:pointer;}
+  .profile .pc-sel.flag{border-color:var(--warn);color:var(--warn);}
   @media(max-width:640px){ .profile{width:100%;border-right:none;border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0;} }
   .stats{display:flex;flex-wrap:wrap;gap:22px;}
   .stat{min-width:92px;}
@@ -659,10 +661,23 @@ function makeCard(ph, s, idx){
 // "unstated" renders nothing at all, because most postings say nothing and a blank
 // must never read as permission.
 const WA_LABEL={citizens_only:'US citizens only',no_sponsorship:'No sponsorship',sponsors:'Sponsors visas'};
+// The posting's verdict is stored; YOUR status is not. This compares them at
+// display time, so changing the dropdown re-flags every card instantly and no
+// stored row can go stale. Mirrors work_auth.concern() in Python — keep in step.
+function myWorkAuth(){ return (STATUS&&STATUS.profile&&STATUS.profile.work_auth)||'unset'; }
+function waConcern(j){
+  const v=j.workAuth||'';
+  if(!v||v==='unstated') return '';
+  const me=myWorkAuth();
+  if(me==='unset') return '';            // nothing captured, nothing to say
+  if(v==='citizens_only' && me!=='citizen') return 'posting states U.S. citizenship is required';
+  if(v==='no_sponsorship' && me==='needs_sponsorship') return 'posting states it does not sponsor, and you indicated you need sponsorship';
+  return '';
+}
 function waMeta(j){
   const v=j.workAuth||'';
   if(!v||v==='unstated'||!WA_LABEL[v]) return '';
-  const concern=j.workAuthConcern||'';
+  const concern=waConcern(j);
   // ⚠ carries the conflict, not colour alone — this stays readable if you can't
   // distinguish the green from the amber.
   const col=(v==='sponsors')?'var(--good)':'var(--warn)';
@@ -670,7 +685,7 @@ function waMeta(j){
   return '<span class="m" title="'+esc(tip)+'" style="color:'+col+'">'+
          '<span class="k">Work auth</span>'+(concern?'⚠ ':'')+esc(WA_LABEL[v])+'</span>';
 }
-function anyWorkAuthConcern(){ return (JOBS||[]).some(j=>j.workAuthConcern); }
+function anyWorkAuthConcern(){ return (JOBS||[]).some(j=>waConcern(j)); }
 
 function kcard(j){
   const c=document.createElement('div'); c.className='kcard'; c.draggable=true; c.dataset.id=j.id;
@@ -694,7 +709,7 @@ function kcard(j){
 }
 let FILTER={q:'',warm:false,fit:'all',waFlagged:false};
 function passFilter(j){
-  if(FILTER.waFlagged && !j.workAuthConcern) return false;
+  if(FILTER.waFlagged && !waConcern(j)) return false;
   if(FILTER.warm && !j.warm) return false;
   if(FILTER.fit!=='all' && (j.fit||'core')!==FILTER.fit) return false;
   if(FILTER.q){ const q=FILTER.q.toLowerCase(); if(!(((j.role||'')+' '+(j.co||'')).toLowerCase().includes(q))) return false; }
@@ -707,10 +722,11 @@ function renderPipeline(root){
     '<input class="fsearch" id="f-q" type="search" placeholder="Filter role or company…" value="'+esc(FILTER.q)+'">'+
     '<button class="fbtn'+(FILTER.warm?' on':'')+'" id="f-warm">🤝 Warm only</button>'+
     '<select class="fsel" id="f-fit"><option value="all">All fits</option><option value="core">Core fit</option><option value="stretch">Stretch</option></select>'+
-    // Only rendered when something is actually flagged, so this stays invisible
-    // for anyone whose status conflicts with nothing, and for anyone who never
-    // filled in WORK_AUTH at all. No dead controls.
-    (anyWorkAuthConcern()?'<button class="fbtn'+(FILTER.waFlagged?' on':'')+'" id="f-wa" title="Postings whose stated work-authorization terms conflict with your WORK_AUTH answers">⚠ Work-auth flags</button>':'');
+    // Rendered always but HIDDEN unless something is actually flagged. It used to
+    // be built conditionally, which broke once the comparison became live: the
+    // button is created when the toolbar is built, so changing your status could
+    // never make it appear. Visibility is toggled by reflagWorkAuth().
+    '<button class="fbtn'+(FILTER.waFlagged?' on':'')+'" id="f-wa" style="display:none" title="Postings whose stated work-authorization terms conflict with your work-auth status">⚠ Work-auth flags</button>';
   root.appendChild(bar);
   const hint=document.createElement('div'); hint.className='khint';
   hint.innerHTML='Click a card for full detail · drag between columns to change status.';
@@ -721,6 +737,7 @@ function renderPipeline(root){
   const fs=document.getElementById('f-fit'); fs.value=FILTER.fit; fs.onchange=()=>{ FILTER.fit=fs.value; renderKanban(); };
   const wa=document.getElementById('f-wa');
   if(wa) wa.onclick=()=>{ FILTER.waFlagged=!FILTER.waFlagged; wa.classList.toggle('on',FILTER.waFlagged); renderKanban(); };
+  reflagWorkAuth();   // set the button's initial visibility
   renderKanban();
 }
 function renderKanban(){   // renders columns into #kwrap only, so filter typing keeps focus
@@ -811,8 +828,55 @@ function renderProfile(){
   el.innerHTML=
     '<div class="pc-name">'+esc(p.name||'You')+'</div>'+
     (p.current_role?'<div class="pc-now">'+esc(p.current_role)+'</div>':'')+
-    '<div class="pc-rows">'+row('Target',role)+row('Salary',p.target_comp)+row('Metro',p.metro)+'</div>';
+    '<div class="pc-rows">'+row('Target',role)+row('Salary',p.target_comp)+row('Metro',p.metro)+waRow(p)+'</div>';
   el.style.display='';
+  wireWorkAuth();
+}
+
+// Work-auth status sits on the profile card beside Target/Salary/Metro because
+// it is the same KIND of fact: a standing constraint on which roles are actually
+// open to you. Changing it re-flags every card immediately — the comparison is
+// never stored, so it can never be stale.
+function waRow(p){
+  const opts=p.work_auth_options||[];
+  if(!opts.length) return '';
+  const cur=p.work_auth||'unset';
+  return '<div class="pc-row"><span class="pc-k">Work auth</span>'+
+    '<select class="pc-sel" id="pc-wa" title="Flags postings whose stated terms conflict with your status. Never written into a résumé or cover letter.">'+
+    opts.map(o=>'<option value="'+esc(o.key)+'"'+(o.key===cur?' selected':'')+'>'+esc(o.label)+'</option>').join('')+
+    '</select></div>';
+}
+function wireWorkAuth(){
+  const sel=document.getElementById('pc-wa'); if(!sel) return;
+  sel.onchange=async()=>{
+    const prev=(STATUS.profile||{}).work_auth, next=sel.value;
+    STATUS.profile.work_auth=next;      // optimistic: re-flag before the round trip
+    reflagWorkAuth();
+    try{
+      const r=await fetch('/api/set-work-auth',{method:'POST',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({status:next})});
+      const j=await r.json();
+      if(!j.ok) throw new Error(j.error||'save failed');
+      toast('Work auth set to '+sel.options[sel.selectedIndex].text);
+    }catch(e){
+      STATUS.profile.work_auth=prev;    // roll back — the UI must not claim a save that failed
+      sel.value=prev; reflagWorkAuth();
+      toast('Could not save work auth: '+e.message);
+    }
+  };
+  reflagWorkAuth();
+}
+function reflagWorkAuth(){
+  const any=(JOBS||[]).some(j=>waConcern(j));
+  const sel=document.getElementById('pc-wa');
+  if(sel) sel.classList.toggle('flag', any);
+  const btn=document.getElementById('f-wa');
+  if(btn){
+    btn.style.display = any ? '' : 'none';
+    // Never leave the board filtered by a control the user can no longer see.
+    if(!any && FILTER.waFlagged){ FILTER.waFlagged=false; btn.classList.remove('on'); }
+  }
+  if(document.getElementById('kwrap')) renderKanban();
 }
 function stat(n,k,pct){ return '<div class="stat"><div class="n">'+n+'</div><div class="k">'+k+'</div>'+(pct!=null?'<div class="prog"><i style="width:'+pct+'%"></i></div>':'')+'</div>'; }
 

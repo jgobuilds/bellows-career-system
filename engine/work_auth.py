@@ -161,6 +161,102 @@ def concern(finding: Finding, work_auth: dict[str, object] | None) -> str | None
     return None
 
 
+# ---------------------------------------------------------------------------
+# The user's own status.
+#
+# Stored as ONE named status rather than three loose booleans, so the dashboard
+# dropdown, userconfig.py, and concern() cannot drift apart. The posting's verdict
+# is a durable fact and is persisted per job; the user's status is NOT baked into
+# job records, because it changes and would leave every stored row stale. The
+# comparison happens at display time.
+# ---------------------------------------------------------------------------
+STATUSES: dict[str, dict[str, object] | None] = {
+    "citizen": {"authorized_us": True, "needs_sponsorship": False, "citizenship": "citizen"},
+    "permanent_resident": {
+        "authorized_us": True,
+        "needs_sponsorship": False,
+        "citizenship": "permanent_resident",
+    },
+    "authorized": {"authorized_us": True, "needs_sponsorship": False, "citizenship": "other"},
+    "needs_sponsorship": {
+        "authorized_us": True,
+        "needs_sponsorship": True,
+        "citizenship": "other",
+    },
+    "unset": None,
+}
+
+STATUS_LABELS: dict[str, str] = {
+    "unset": "Not set",
+    "citizen": "US citizen",
+    "permanent_resident": "Green Card / permanent resident",
+    "authorized": "Authorized, no sponsorship needed",
+    "needs_sponsorship": "Will need sponsorship",
+}
+
+
+def status_key(work_auth: dict[str, object] | None) -> str:
+    """Which named status a stored WORK_AUTH dict corresponds to."""
+    if not work_auth:
+        return "unset"
+    for key, value in STATUSES.items():
+        if value == work_auth:
+            return key
+    # A hand-edited dict that matches no preset: classify it by what actually
+    # drives concern(), so the dropdown still shows something truthful.
+    if work_auth.get("needs_sponsorship"):
+        return "needs_sponsorship"
+    return "citizen" if work_auth.get("citizenship") == "citizen" else "authorized"
+
+
+def render_config_block(status: str) -> str:
+    """The exact WORK_AUTH assignment to write into userconfig.py."""
+    value = STATUSES[status]
+    if value is None:
+        return "WORK_AUTH = None"
+    # The inline comments are reproduced, not dropped. Someone who opens
+    # userconfig.py after changing this in the dashboard should find the same
+    # annotated block they started with, not a stripped one.
+    rows = [
+        (
+            f'    "authorized_us": {value["authorized_us"]},',
+            "# legally authorized to work in the US?",
+        ),
+        (
+            f'    "needs_sponsorship": {value["needs_sponsorship"]},',
+            "# will you need sponsorship now or in the future?",
+        ),
+        (
+            f'    "citizenship": "{value["citizenship"]}",',
+            '# "citizen" | "permanent_resident" | "other"',
+        ),
+    ]
+    width = max(len(code) for code, _ in rows) + 2
+    body = "\n".join(f"{code.ljust(width)}{comment}" for code, comment in rows)
+    return "WORK_AUTH = {\n" + body + "\n}"
+
+
+_ASSIGNMENT = re.compile(
+    r"^WORK_AUTH\s*=\s*(?:None|\{.*?^\})",
+    re.M | re.S,
+)
+
+
+def rewrite_config(text: str, status: str) -> str:
+    """Replace the WORK_AUTH assignment in userconfig.py source.
+
+    Pure so it can be tested without touching a real config — a botched rewrite
+    here would break the one file the whole system reads.
+    """
+    if status not in STATUSES:
+        raise ValueError(f"unknown work-auth status {status!r}")
+    block = render_config_block(status)
+    new, n = _ASSIGNMENT.subn(lambda _: block, text, count=1)
+    if n:
+        return new
+    return text.rstrip() + "\n\n" + block + "\n"
+
+
 def label(verdict: Verdict) -> str:
     """Short display text for a chip or a CSV column."""
     return {
