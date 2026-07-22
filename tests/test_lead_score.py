@@ -41,6 +41,17 @@ def _in_range_place():
     return places[0] if places else None
 
 
+def _excluded_place():
+    """A place the loaded config says you will not go.
+
+    Derived, not hard-coded. Naming a real city here works against a filled-in
+    config and silently fails against the template CI scaffolds, which is exactly
+    how the country-token tests broke the build.
+    """
+    excluded = list(getattr(CFG, "GEO_EXCLUDE", []) or [])
+    return excluded[0] if excluded else None
+
+
 class TestWorkModelIsNotAPlace(unittest.TestCase):
     def test_places_helper_strips_work_model_words(self):
         got = lead_score._places(["hybrid", "remote", "hartford", "onsite", "boston"])
@@ -98,26 +109,37 @@ class TestMultiLocationPostings(unittest.TestCase):
     def test_a_country_token_is_not_an_in_range_option(self):
         """Regression, caught on real swept data.
 
-        "Seattle, Washington, United States" matched GEO_OK on the country, so it
+        "Seattle, Washington, United States" matched GEO_OK on the COUNTRY, so it
         looked like a multi-location posting and escaped the exclusion — scoring
-        Keep/8 for someone who will not relocate. Every excluded city that spells
-        out its country did the same, while "Seattle, WA, US" was handled correctly.
+        Keep/8 for someone who will not relocate. "Seattle, WA, US" was handled
+        correctly, so the bug needed a specific spelling to appear.
+
+        The place is derived from the loaded config: naming Seattle here passes
+        against a filled-in config and fails against the template, which is how the
+        first version of this test broke CI.
         """
-        spelled_out = _geo_reason("Seattle, Washington, United States")
-        abbreviated = _geo_reason("Seattle, WA, US")
-        self.assertIn("off-geo", spelled_out)
-        self.assertNotIn("multi-location", spelled_out)
-        self.assertIn("off-geo", abbreviated)
+        excluded = _excluded_place()
+        if not excluded:
+            self.skipTest("config defines no excluded places")
+        reason = _geo_reason(f"Somewhereville, {excluded.title()}, United States")
+        self.assertIn("off-geo", reason)
+        self.assertNotIn("multi-location", reason)
 
     def test_an_excluded_city_cannot_be_a_keep(self):
-        for loc in ("Seattle, Washington, United States", "Austin, TX, United States"):
+        excluded = _excluded_place()
+        if not excluded:
+            self.skipTest("config defines no excluded places")
+        for loc in (f"Somewhereville, {excluded.title()}, United States", f"{excluded.title()}"):
             _, bucket, _ = lead_score.score_row("Director of Data Governance", loc)
             self.assertNotEqual(bucket, "Keep", loc)
 
     def test_a_genuine_multi_location_still_qualifies(self):
-        # the branch must keep working for real cases: a specific in-range city
-        reason = _geo_reason("San Francisco, CA | New York City, NY")
-        self.assertIn("multi-location", reason)
+        # the branch must keep working for real cases: a SPECIFIC in-range place
+        # alongside an excluded one
+        place, excluded = _in_range_place(), _excluded_place()
+        if not place or not excluded:
+            self.skipTest("config needs both an in-range and an excluded place")
+        self.assertIn("multi-location", _geo_reason(f"{excluded.title()} | {place}"))
 
     def test_country_only_still_scores(self):
         # a US-wide posting is plausible on its own; it just isn't EVIDENCE of an
