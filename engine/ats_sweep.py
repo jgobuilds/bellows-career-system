@@ -25,6 +25,7 @@ RUN:
   python ats_sweep.py --max-age-days 30  # tighter recency
   python ats_sweep.py --remote-only      # drop clearly-onsite roles
   python ats_sweep.py --only greenhouse  # one ATS type (greenhouse|lever|ashby|smartrecruiters|workday)
+  python ats_sweep.py --workers 1        # serial; parallel-by-ATS is the default
 
 OUTPUT:
   leads_ats.csv - company,title,location,date_posted,site,job_url,search,industry
@@ -48,10 +49,12 @@ import os
 import random
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import _paths  # noqa: F401  (side-effect: adds repo root to sys.path for `import config`)
@@ -62,6 +65,10 @@ TIMEOUT = 20
 PER_CALL_PAUSE = 0.6  # minimum seconds between requests to the SAME domain
 JITTER = 0.4  # random extra delay; a flat interval is a bot signature
 RETRY_CAP = 30.0  # never sleep longer than this on a Retry-After
+# One worker per ATS. This does NOT raise the per-domain request rate — that stays
+# at PER_CALL_PAUSE + jitter however many workers run — it only stops one ATS's
+# cooldown being served in series with another's.
+MAX_WORKERS = 6
 
 # ---------------------------------------------------------------------------
 # Company list - the compounding precision cache. Broad and cross-industry ON
@@ -172,18 +179,35 @@ def _domain(url):
     return ".".join(parts[-2:]) if len(parts) >= 2 else host
 
 
+_LOCKS_GUARD = threading.Lock()
+_DOMAIN_LOCKS: dict[str, threading.Lock] = {}
+PRINT_LOCK = threading.Lock()  # keeps worker log lines from interleaving mid-line
+
+
+def _domain_lock(domain):
+    with _LOCKS_GUARD:
+        return _DOMAIN_LOCKS.setdefault(domain, threading.Lock())
+
+
 def _throttle(url):
-    """Block until this domain is due another request, plus jitter."""
+    """Block until this domain is due another request, plus jitter.
+
+    The lock is held ACROSS the sleep on purpose. That is what serialises two
+    threads that happen to share a domain, while threads on different domains
+    proceed in parallel — the whole basis for sweeping ATS types concurrently
+    without raising the per-domain request rate at all.
+    """
     d = _domain(url)
-    last = _LAST_HIT.get(d)
-    if last is not None:
-        wait = PER_CALL_PAUSE - (time.monotonic() - last)
-        if wait > 0:
-            time.sleep(wait)
-    # A flat interval is a machine signature, so vary it. Not security-sensitive:
-    # this only decides how long to be polite for.
-    time.sleep(random.uniform(0, JITTER))  # noqa: S311
-    _LAST_HIT[d] = time.monotonic()
+    with _domain_lock(d):
+        last = _LAST_HIT.get(d)
+        if last is not None:
+            wait = PER_CALL_PAUSE - (time.monotonic() - last)
+            if wait > 0:
+                time.sleep(wait)
+        # A flat interval is a machine signature, so vary it. Not security-sensitive:
+        # this only decides how long to be polite for.
+        time.sleep(random.uniform(0, JITTER))  # noqa: S311
+        _LAST_HIT[d] = time.monotonic()
     return d
 
 
@@ -206,7 +230,10 @@ def _request(req, url):
             except (TypeError, ValueError):
                 delay = 0.0
             delay = max(delay, PER_CALL_PAUSE * (2 ** (attempt + 1)))
-            _LAST_HIT[domain] = time.monotonic() + delay  # hold the whole domain back
+            # Hold the WHOLE domain back, not just this call: every other company
+            # on this ATS is about to hit the same host.
+            with _domain_lock(domain):
+                _LAST_HIT[domain] = time.monotonic() + delay
             time.sleep(min(delay, RETRY_CAP))
     raise RateLimited(_domain(url), 429)  # unreachable, but keeps the contract explicit
 
@@ -504,6 +531,81 @@ def _label(c):
     return c.get("slug") or c.get("tenant") or "?"
 
 
+def _poll_company(c, lane_ok, opts):
+    """Poll one company and return its rows plus an outcome.
+
+    Deliberately touches NO shared mutable state — every counter is returned and
+    merged by the caller. That is what makes running one of these per ATS safe;
+    the only cross-thread coordination is the per-domain throttle, which is where
+    it belongs.
+    """
+    key = _company_key(c)
+    is_new = key not in opts["last"]
+    since, verbose = opts["since"], opts["verbose"]
+    result = {"key": key, "is_new": is_new, "rows": [], "outcome": "ok"}
+
+    def say(msg):
+        if verbose:
+            with PRINT_LOCK:  # workers interleave; keep each line intact
+                print(msg, file=sys.stderr)
+
+    # full window for brand-new companies (or --full / no prior run); else delta
+    eff_age = (
+        opts["max_age_days"]
+        if (opts["full"] or is_new or since is None or not opts["delta"])
+        else min(opts["max_age_days"], max(1, since + 1))
+    )
+
+    try:
+        rows = FETCHERS[c["ats"]](c)
+    except RateLimited as e:
+        # NOT an error: the feed is alive and we were too quick. Counted separately
+        # so a throttled company is never mistaken for a dead slug and pruned.
+        say(
+            f"  - {c['ats']}:{_label(c)} RATE-LIMITED by {e.domain} "
+            f"(HTTP {e.code}) — still live, retry next sweep"
+        )
+        result["outcome"] = "limited"
+        return result
+    except urllib.error.HTTPError as e:
+        say(f"  - {c['ats']}:{_label(c)} HTTP {e.code} (skip)")
+        result["outcome"] = "error"
+        return result
+    except Exception as e:
+        say(f"  - {c['ats']}:{_label(c)} error: {e} (skip)")
+        result["outcome"] = "error"
+        return result
+
+    for r in rows:
+        if not r["title"]:
+            continue
+        if not lane_ok(r["title"], r["location"]):
+            continue
+        if opts["remote_only"] and not r["is_remote"]:
+            continue
+        age = r.get("age_days")
+        if eff_age is not None and age is not None and age > eff_age:
+            continue
+        if not r.get("description"):
+            r["description"] = _enrich_desc(r, c)
+        # Work-authorization terms live in the JD body, never the title, so this is
+        # the only place in the pipeline that can read them. Only the compact verdict
+        # travels downstream; the description is not persisted past the sweep CSV.
+        #
+        # What the POSTING requires is a durable fact, so it is stored. Whether that
+        # conflicts with YOU is not, because your status changes and a baked
+        # comparison would leave every existing row stale.
+        _wa = work_auth.classify(r.get("description"))
+        r["work_auth"] = _wa.verdict
+        r["work_auth_evidence"] = _wa.evidence
+        r["search"] = r.pop("industry", "")  # reuse 'search' col to carry industry
+        result["rows"].append(r)
+
+    tag = "" if c.get("status") == "validated" else " [verify]"
+    say(f"  - {c['ats']}:{_label(c)}{tag}: {len(rows)} open, {len(result['rows'])} in-lane")
+    return result
+
+
 def sweep(
     max_age_days=CFG.MAX_AGE_DAYS,
     remote_only=False,
@@ -511,6 +613,7 @@ def sweep(
     verbose=True,
     delta=True,
     full=False,
+    workers=MAX_WORKERS,
 ):
     """Poll every company, keep only in-lane titles (via lead_score), return rows.
 
@@ -540,88 +643,52 @@ def sweep(
     _last = set(_state.get("companies") or [])
     _since = _days_since(_state.get("last_run"))
     _cur_keys, _new_n = [], 0
-    # Round-robin across ATS types so consecutive calls hit different domains,
-    # letting each domain's cooldown elapse while the others are polled.
-    for c in _interleave(COMPANIES):
-        if only and c["ats"] != only:
-            continue
-        fetcher = FETCHERS.get(c["ats"])
-        if not fetcher:
-            continue
-        checked += 1
-        _key = _company_key(c)
-        _cur_keys.append(_key)
-        _is_new = _key not in _last
-        if _is_new:
-            _new_n += 1
-        # full window for brand-new companies (or --full / no prior run); else delta
-        eff_age = (
-            max_age_days
-            if (full or _is_new or _since is None or not delta)
-            else min(max_age_days, max(1, _since + 1))
-        )
-        try:
-            rows = fetcher(c)
-        except RateLimited as e:
-            # NOT an error: the feed is alive and we were too quick. Counted
-            # separately so a throttled company is never mistaken for a dead
-            # slug and pruned from the config.
-            if verbose:
-                print(
-                    f"  - {c['ats']}:{_label(c)} RATE-LIMITED by {e.domain} "
-                    f"(HTTP {e.code}) — still live, retry next sweep",
-                    file=sys.stderr,
-                )
-            limited += 1
-            continue
-        except urllib.error.HTTPError as e:
-            if verbose:
-                print(f"  - {c['ats']}:{_label(c)} HTTP {e.code} (skip)", file=sys.stderr)
-            errors += 1
-            continue
-        except Exception as e:
-            if verbose:
-                print(f"  - {c['ats']}:{_label(c)} error: {e} (skip)", file=sys.stderr)
-            errors += 1
-            continue
 
-        hits = 0
-        for r in rows:
-            if not r["title"]:
-                continue
-            if not lane_ok(r["title"], r["location"]):
-                continue
-            if remote_only and not r["is_remote"]:
-                continue
-            age = r.get("age_days")
-            if eff_age is not None and age is not None and age > eff_age:
-                continue
-            if not r.get("description"):
-                r["description"] = _enrich_desc(r, c)
-            # Work-authorization terms live in the JD body, never the title, so this
-            # is the only place in the pipeline that can read them. Only the compact
-            # verdict travels downstream; the description itself is not persisted
-            # past the sweep CSV.
-            #
-            # What the POSTING requires is a durable fact, so it is stored. Whether
-            # that conflicts with YOU is not stored: your status changes, and a baked
-            # comparison would leave every existing row silently stale. The dashboard
-            # compares at display time against the current setting.
-            _wa = work_auth.classify(r.get("description"))
-            r["work_auth"] = _wa.verdict
-            r["work_auth_evidence"] = _wa.evidence
-            r["search"] = r.pop("industry", "")  # reuse 'search' col to carry industry
-            kept.append(r)
-            hits += 1
-        if verbose:
-            tag = "" if c.get("status") == "validated" else " [verify]"
-            print(
-                f"  - {c['ats']}:{_label(c)}{tag}: {len(rows)} open, {hits} in-lane",
-                file=sys.stderr,
-            )
-        # No per-company sleep: spacing is enforced per DOMAIN inside the request
-        # helpers, so polling a Greenhouse company no longer delays the next
-        # Workday one. Safer AND faster than the flat pause this replaces.
+    opts = {
+        "remote_only": remote_only,
+        "max_age_days": max_age_days,
+        "delta": delta,
+        "full": full,
+        "last": _last,
+        "since": _since,
+        "verbose": verbose,
+    }
+
+    targets = [c for c in COMPANIES if (not only or c["ats"] == only) and FETCHERS.get(c["ats"])]
+
+    # One worker per ATS. Grouping by ATS is the scheduling unit; correctness comes
+    # from the per-DOMAIN locks in _throttle, so even if two ATS types ever shared a
+    # host they would still queue behind one another rather than double the rate.
+    #
+    # This does NOT increase the per-domain request rate — that is fixed at
+    # PER_CALL_PAUSE + jitter regardless of how many workers exist. It only stops
+    # Greenhouse's cooldown being served in series with Workday's.
+    groups: dict[str, list] = {}
+    for c in targets:
+        groups.setdefault(c["ats"], []).append(c)
+
+    if workers <= 1 or len(groups) <= 1:
+        # Serial path keeps the spread order, so consecutive calls still alternate
+        # domains and each cooldown overlaps the next company's work.
+        results = [_poll_company(c, lane_ok, opts) for c in _interleave(targets)]
+    else:
+
+        def _run_group(cs):
+            return [_poll_company(c, lane_ok, opts) for c in cs]
+
+        with ThreadPoolExecutor(max_workers=min(len(groups), workers)) as pool:
+            results = [r for batch in pool.map(_run_group, groups.values()) for r in batch]
+
+    for r in results:
+        checked += 1
+        _cur_keys.append(r["key"])
+        if r["is_new"]:
+            _new_n += 1
+        if r["outcome"] == "limited":
+            limited += 1
+        elif r["outcome"] == "error":
+            errors += 1
+        kept.extend(r["rows"])
 
     _save_state(_cur_keys)
     LAST_SWEEP_META.clear()
@@ -688,6 +755,13 @@ def main():
     )
     ap.add_argument("--out", default=CFG.LEADS_ATS)
     ap.add_argument(
+        "--workers",
+        type=int,
+        default=MAX_WORKERS,
+        help="parallel ATS workers (1 = serial). The per-domain request rate is "
+        "unchanged either way; this only stops one ATS waiting on another.",
+    )
+    ap.add_argument(
         "--full",
         action="store_true",
         help="ignore delta; pull the full --max-age-days window for every company",
@@ -695,7 +769,11 @@ def main():
     args = ap.parse_args()
 
     rows = sweep(
-        max_age_days=args.max_age_days, remote_only=args.remote_only, only=args.only, full=args.full
+        max_age_days=args.max_age_days,
+        remote_only=args.remote_only,
+        only=args.only,
+        full=args.full,
+        workers=args.workers,
     )
     write_csv(rows, args.out)
     print(
