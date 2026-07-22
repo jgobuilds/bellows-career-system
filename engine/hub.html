@@ -449,6 +449,21 @@ async function post(url, body){
   const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const res=await r.json(); if(!r.ok||!res.ok) throw new Error(res.error||('HTTP '+r.status)); return res;
 }
+// `checks` is meant to be [[status, text], ...] with status 'ok' | 'warn', but the
+// triage scaffold hands you a plain string field, so a human filling it in as
+// documented produced a string. .map then threw and took the ENTIRE drawer with
+// it — clicking a job simply did nothing, with no visible error. Normalise here:
+// the reader should not explode on input the writer plausibly produces.
+function checkRows(v){
+  if(!v) return [];
+  if(typeof v === 'string'){
+    // free text is an UNVERIFIED note, so it gets the warn icon. A green tick
+    // would claim someone had confirmed it.
+    return v.split(/\s*;\s*/).filter(Boolean).map(t=>['warn', t]);
+  }
+  if(!Array.isArray(v)) return [];
+  return v.map(c=>Array.isArray(c) ? c : ['warn', String(c)]).filter(c=>c[1]);
+}
 function review(id){
   const j=JOBS.find(x=>x.id===id); if(!j) return;
   DRAWER_ID=id;
@@ -471,7 +486,7 @@ function review(id){
   document.getElementById('d-gaps').innerHTML=w.g.length? w.g.map(x=>'<div class="fitrow">'+x+'</div>').join('') : '<div style="color:var(--grey-1);font-size:12.5px">None flagged.</div>';
   document.getElementById('d-ats').innerHTML=(j.ats!=null)?'<span style="color:'+(j.ats>=85?'var(--ok)':'var(--warm)')+'">ATS '+esc(j.ats)+'%</span>':'';
   document.getElementById('d-docs').innerHTML=docLinks(j);
-  document.getElementById('d-checks').innerHTML=(j.checks||[]).map(c=>'<div class="checkrow '+(c[0]==='warn'?'warnrow':'')+'">'
+  document.getElementById('d-checks').innerHTML=checkRows(j.checks).map(c=>'<div class="checkrow '+(c[0]==='warn'?'warnrow':'')+'">'
     +'<svg class="ci" viewBox="0 0 24 24" fill="none" stroke="'+(c[0]==='warn'?'#8A5A00':'#0F6E56')+'" stroke-width="2.2">'
     +(c[0]==='warn'?'<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>':'<path d="M20 6 9 17l-5-5"/>')
     +'</svg><span>'+esc(c[1])+'</span></div>').join('')||'<div class="checkrow">No checks recorded.</div>';

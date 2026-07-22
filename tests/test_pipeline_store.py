@@ -81,3 +81,42 @@ class TestJobsHelpers(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNormalizeChecks(unittest.TestCase):
+    """`checks` must reach jobs.json as [[status, text], ...].
+
+    A bare string broke the dashboard drawer outright — the renderer calls .map,
+    throws, and the entire detail panel fails to open with no visible error.
+    Clicking a job simply did nothing. Four records were in that state, and the
+    triage scaffold typed the field as a string, so producing one was the
+    documented behaviour rather than a mistake.
+    """
+
+    def test_string_becomes_warn_rows(self):
+        rec = store.normalize_checks({"checks": "confirm comp; verify remote"})
+        self.assertEqual(rec["checks"], [["warn", "confirm comp"], ["warn", "verify remote"]])
+
+    def test_free_text_is_warn_not_ok(self):
+        # a green tick would claim someone had verified it; nobody has
+        rec = store.normalize_checks({"checks": "unverified note"})
+        self.assertEqual(rec["checks"][0][0], "warn")
+
+    def test_wellformed_pairs_pass_through(self):
+        pairs = [["ok", "metrics trace"], ["warn", "check comp"]]
+        self.assertEqual(store.normalize_checks({"checks": list(pairs)})["checks"], pairs)
+
+    def test_empty_and_missing(self):
+        self.assertEqual(store.normalize_checks({"checks": ""})["checks"], [])
+        self.assertEqual(store.normalize_checks({"checks": None})["checks"], [])
+        self.assertEqual(store.normalize_checks({})["checks"], [])
+
+    def test_bare_item_inside_the_list_is_repaired(self):
+        rec = store.normalize_checks({"checks": ["just text", ["ok", "fine"]]})
+        self.assertEqual(rec["checks"], [["warn", "just text"], ["ok", "fine"]])
+
+    def test_normalize_doc_applies_it_too(self):
+        # add_jobs_batch only calls normalize_doc, so the coercion has to ride along
+        rec = store.normalize_doc({"doc": "applications/burq/", "checks": "a; b"})
+        self.assertEqual(rec["doc"], "burq")
+        self.assertEqual(len(rec["checks"]), 2)
