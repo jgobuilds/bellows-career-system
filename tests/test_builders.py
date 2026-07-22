@@ -231,5 +231,85 @@ class TestReverseChronology(unittest.TestCase):
         self.assertEqual(resume_builder._end_key("City, ST | 2020 - 2024"), (2024, 0))
 
 
+class TestAdvisorySection(unittest.TestCase):
+    """Concurrent fractional work goes in its own section, out of the main
+    reverse-chron timeline. It was folding into the current job's role-description
+    on Workday import because its dates overlapped the current role (2026-07-22)."""
+
+    def _spec(self):
+        return {
+            "name": "Test Person",
+            "contact": "City, ST | test@example.com",
+            "level": "executive",
+            "summary": "A leader.",
+            "competencies": ["A | B"],
+            "skills": [["Tools:  ", "X, Y"]],
+            "education": [["MS, Field", ", University"]],
+            "experience": [
+                {
+                    "company": "Optimum",
+                    "title": "Director of Data",
+                    "location_dates": "City, ST | April 2024 - Present",
+                    "bullets": [["Led", " a team."]],
+                },
+                {
+                    "company": "Upright",
+                    "title": "Head of Data",
+                    "location_dates": "City, ST | June 2022 - September 2023",
+                    "bullets": [["Built", " a warehouse."]],
+                },
+            ],
+            "advisory": [
+                {
+                    "company": "Self-Employed",
+                    "title": "Fractional Head of Data",
+                    "location_dates": "City, ST | September 2023 - April 2026",
+                    "bullets": [["Advised", " an EdTech client."]],
+                }
+            ],
+        }
+
+    def test_overlapping_advisory_does_not_trip_reverse_chron(self):
+        # Self-Employed (ends 2026) sits between Optimum (Present) and Upright (2023)
+        # by date, which WOULD be out of order in the main list. In its own section
+        # it is not checked against the main timeline.
+        warns = [w for w in resume_builder.validate(self._spec()) if "chronological" in w]
+        self.assertEqual(warns, [], warns)
+
+    def test_advisory_entries_are_still_format_checked(self):
+        spec = self._spec()
+        spec["advisory"][0]["title"] = "Fractional Head, Data"  # comma truncates on import
+        self.assertTrue(
+            any("truncate" in w for w in resume_builder.validate(spec)),
+            "advisory titles must still get the punctuation check",
+        )
+
+    def test_advisory_renders_its_own_section(self):
+        import os
+        import tempfile
+
+        import docx as _docx
+
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "r.docx")
+            resume_builder.build_resume(self._spec(), out)
+            paras = [p.text.strip() for p in _docx.Document(out).paragraphs if p.text.strip()]
+        self.assertIn("Advisory & Consulting", paras)
+        # Optimum is immediately followed by Upright in the main timeline, not by
+        # the consulting — that adjacency is the whole point of the move.
+        opt, up = paras.index("Optimum"), paras.index("Upright")
+        adv = paras.index("Self-Employed")
+        self.assertLess(up, adv, "Upright must precede the advisory block")
+        self.assertLess(opt, up)
+
+    def test_no_advisory_key_changes_nothing(self):
+        spec = self._spec()
+        del spec["advisory"]
+        # still valid, still builds — the feature is purely additive
+        self.assertEqual(
+            [w for w in resume_builder.validate(spec) if "chronological" in w], []
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
