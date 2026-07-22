@@ -97,7 +97,9 @@ def main():
                 "fit": "",
                 "tags": [],
                 "why": "",
-                "checks": "",
+                # [[status, text], ...] with status "ok" | "warn". A bare string
+                # here used to break the dashboard drawer outright.
+                "checks": [],
                 "diff": "",
                 "cover": "",
                 "status": "to review",

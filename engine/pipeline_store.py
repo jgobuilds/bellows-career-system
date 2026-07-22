@@ -71,6 +71,27 @@ def normalize_doc(rec: dict) -> dict:
     path. Normalize so a stray "applications/burq/" can't break the doc links."""
     if rec.get("doc"):
         rec["doc"] = os.path.basename(str(rec["doc"]).replace("\\", "/").rstrip("/"))
+    return normalize_checks(rec)
+
+
+def normalize_checks(rec: dict) -> dict:
+    """`checks` is [[status, text], ...] with status "ok" | "warn".
+
+    A plain string here used to break the dashboard drawer outright: the renderer
+    calls .map on it, throws, and the whole detail panel silently fails to open —
+    clicking a job just did nothing. The triage scaffold typed the field as a
+    string, so writing one was the documented thing to do. Coerced on the way in
+    as well as on the way out, so the stored shape stays honest.
+    """
+    v = rec.get("checks")
+    if isinstance(v, str):
+        rec["checks"] = [["warn", t.strip()] for t in v.split(";") if t.strip()]
+    elif isinstance(v, list):
+        rec["checks"] = [
+            c if isinstance(c, (list, tuple)) and len(c) == 2 else ["warn", str(c)] for c in v if c
+        ]
+    elif v is None:
+        rec["checks"] = []
     return rec
 
 
