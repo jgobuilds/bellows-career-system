@@ -45,10 +45,12 @@ import csv
 import html as _htmllib
 import json
 import os
+import random
 import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
@@ -57,7 +59,9 @@ import _paths  # noqa: F401  (side-effect: adds repo root to sys.path for `impor
 ROOT = os.path.dirname(os.path.abspath(__file__))
 UA = "Mozilla/5.0 (apply-pipeline ats_sweep; personal job search; low volume)"
 TIMEOUT = 20
-PER_CALL_PAUSE = 0.6  # be polite to public feeds
+PER_CALL_PAUSE = 0.6  # minimum seconds between requests to the SAME domain
+JITTER = 0.4  # random extra delay; a flat interval is a bot signature
+RETRY_CAP = 30.0  # never sleep longer than this on a Retry-After
 
 # ---------------------------------------------------------------------------
 # Company list - the compounding precision cache. Broad and cross-industry ON
@@ -135,10 +139,81 @@ def _days_since(iso):
 # ---------------------------------------------------------------------------
 # HTTP helpers (stdlib)
 # ---------------------------------------------------------------------------
+class RateLimited(Exception):
+    """A host asked us to slow down. Distinct from 'unreachable' on purpose: a 429
+    means the feed is ALIVE and we were rude, which is the opposite conclusion from
+    a 404. Reporting them the same way invites deleting a perfectly good company."""
+
+    def __init__(self, domain, code):
+        super().__init__(f"{domain} rate-limited (HTTP {code})")
+        self.domain = domain
+        self.code = code
+
+
+# Spacing is per DOMAIN, not per company. Two reasons the old per-company sleep was
+# the wrong unit: description enrichment ran inside the row loop and bypassed it
+# entirely (a Workday company with 15 in-lane roles fired 15 back-to-back requests),
+# and 31 Greenhouse companies all resolve to one host, so "one company at a time"
+# still meant 31 hits on boards-api.greenhouse.io.
+_LAST_HIT: dict[str, float] = {}
+RETRY_STATUS = {429, 503}
+MAX_RETRIES = 2
+
+
+def _domain(url):
+    """Registrable domain, so tenants that share infrastructure share a budget.
+
+    Keying on the full hostname would give acme.wd5.myworkdayjobs.com and
+    beta.wd1.myworkdayjobs.com separate buckets — which is exactly the burst we're
+    trying to stop, so it would look implemented and do nothing.
+    """
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    parts = host.split(".")
+    return ".".join(parts[-2:]) if len(parts) >= 2 else host
+
+
+def _throttle(url):
+    """Block until this domain is due another request, plus jitter."""
+    d = _domain(url)
+    last = _LAST_HIT.get(d)
+    if last is not None:
+        wait = PER_CALL_PAUSE - (time.monotonic() - last)
+        if wait > 0:
+            time.sleep(wait)
+    # A flat interval is a machine signature, so vary it. Not security-sensitive:
+    # this only decides how long to be polite for.
+    time.sleep(random.uniform(0, JITTER))  # noqa: S311
+    _LAST_HIT[d] = time.monotonic()
+    return d
+
+
+def _request(req, url):
+    """Throttled fetch with bounded backoff on an explicit slow-down signal."""
+    for attempt in range(MAX_RETRIES + 1):
+        domain = _throttle(url)
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return json.loads(r.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            if e.code not in RETRY_STATUS:
+                raise
+            if attempt == MAX_RETRIES:
+                raise RateLimited(domain, e.code) from None
+            # Respect Retry-After when the server sends one; otherwise back off
+            # exponentially from the base interval.
+            try:
+                delay = float(e.headers.get("Retry-After") or 0)
+            except (TypeError, ValueError):
+                delay = 0.0
+            delay = max(delay, PER_CALL_PAUSE * (2 ** (attempt + 1)))
+            _LAST_HIT[domain] = time.monotonic() + delay  # hold the whole domain back
+            time.sleep(min(delay, RETRY_CAP))
+    raise RateLimited(_domain(url), 429)  # unreachable, but keeps the contract explicit
+
+
 def _get_json(url):
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+    return _request(req, url)
 
 
 def _post_json(url, body):
@@ -152,8 +227,29 @@ def _post_json(url, body):
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return json.loads(r.read().decode("utf-8", "replace"))
+    return _request(req, url)
+
+
+def _interleave(companies):
+    """Round-robin across ATS types so consecutive calls hit different domains.
+
+    Free: it removes the clustering (the config polls 10 Workday tenants in a row)
+    without adding any wall-clock, and it lets the per-domain throttle overlap —
+    Greenhouse's cooldown elapses while Workday is being polled.
+
+    Proportional spreading, not naive round-robin: with 31 Greenhouse and 22 Workday
+    entries, round-robin exhausts the small buckets early and leaves a 9-long
+    Greenhouse tail. Giving each entry a fractional position within its own bucket
+    and sorting on that spreads every ATS evenly across the whole run.
+    """
+    buckets: dict[str, list] = {}
+    for c in companies:
+        buckets.setdefault(c["ats"], []).append(c)
+    spread = [
+        ((i + 0.5) / len(items), c) for items in buckets.values() for i, c in enumerate(items)
+    ]
+    spread.sort(key=lambda pair: pair[0])
+    return [c for _, c in spread]
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +483,8 @@ def fetch_workday(c):
                     "_path": path,
                 }
             )
-        time.sleep(PER_CALL_PAUSE)
+        # no sleep: _post_json throttles per domain, and pausing here
+        # again would serialise paging behind a delay it already paid.
     return rows
 
 
@@ -438,12 +535,14 @@ def sweep(
         def lane_ok(t, loc):
             return bool(_lane.search(t) and _lvl.search(t) and not _block.search(t))
 
-    kept, checked, errors = [], 0, 0
+    kept, checked, errors, limited = [], 0, 0, 0
     _state = _load_state()
     _last = set(_state.get("companies") or [])
     _since = _days_since(_state.get("last_run"))
     _cur_keys, _new_n = [], 0
-    for c in COMPANIES:
+    # Round-robin across ATS types so consecutive calls hit different domains,
+    # letting each domain's cooldown elapse while the others are polled.
+    for c in _interleave(COMPANIES):
         if only and c["ats"] != only:
             continue
         fetcher = FETCHERS.get(c["ats"])
@@ -463,17 +562,27 @@ def sweep(
         )
         try:
             rows = fetcher(c)
+        except RateLimited as e:
+            # NOT an error: the feed is alive and we were too quick. Counted
+            # separately so a throttled company is never mistaken for a dead
+            # slug and pruned from the config.
+            if verbose:
+                print(
+                    f"  - {c['ats']}:{_label(c)} RATE-LIMITED by {e.domain} "
+                    f"(HTTP {e.code}) — still live, retry next sweep",
+                    file=sys.stderr,
+                )
+            limited += 1
+            continue
         except urllib.error.HTTPError as e:
             if verbose:
                 print(f"  - {c['ats']}:{_label(c)} HTTP {e.code} (skip)", file=sys.stderr)
             errors += 1
-            time.sleep(PER_CALL_PAUSE)
             continue
         except Exception as e:
             if verbose:
                 print(f"  - {c['ats']}:{_label(c)} error: {e} (skip)", file=sys.stderr)
             errors += 1
-            time.sleep(PER_CALL_PAUSE)
             continue
 
         hits = 0
@@ -510,7 +619,9 @@ def sweep(
                 f"  - {c['ats']}:{_label(c)}{tag}: {len(rows)} open, {hits} in-lane",
                 file=sys.stderr,
             )
-        time.sleep(PER_CALL_PAUSE)
+        # No per-company sleep: spacing is enforced per DOMAIN inside the request
+        # helpers, so polling a Greenhouse company no longer delays the next
+        # Workday one. Safer AND faster than the flat pause this replaces.
 
     _save_state(_cur_keys)
     LAST_SWEEP_META.clear()
@@ -532,7 +643,8 @@ def sweep(
     if verbose:
         print(
             f"\nATS sweep: {checked} companies polled, {errors} unreachable, "
-            f"{len(out)} unique in-lane roles.",
+            + (f"{limited} rate-limited, " if limited else "")
+            + f"{len(out)} unique in-lane roles.",
             file=sys.stderr,
         )
     return out
