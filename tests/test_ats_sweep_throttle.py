@@ -167,10 +167,6 @@ class TestRateLimitIsNotAnError(unittest.TestCase):
         self.assertNotIn(404, ats_sweep.RETRY_STATUS)  # a dead slug must NOT retry
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestParallelByAts(unittest.TestCase):
     """Running one worker per ATS must not raise the per-DOMAIN request rate.
 
@@ -224,6 +220,10 @@ class TestParallelByAts(unittest.TestCase):
             patch.object(ats_sweep, "COMPANIES", companies),
             patch.object(ats_sweep, "FETCHERS", fetchers),
             patch.object(ats_sweep, "_save_state", lambda keys: None),
+            # cadence.save() writes into the REAL personal/data. Patching
+            # _save_state but not this one left 14 fake companies (g0, w1...)
+            # in the user's live cadence file. Tests do not touch real data.
+            patch.object(ats_sweep.cadence, "save", lambda path, data: None),
             patch.object(ats_sweep, "PER_CALL_PAUSE", 0.02),
             patch.object(ats_sweep, "JITTER", 0.005),
         ):
@@ -269,6 +269,10 @@ class TestParallelByAts(unittest.TestCase):
             patch.object(ats_sweep, "COMPANIES", companies),
             patch.object(ats_sweep, "FETCHERS", fetchers),
             patch.object(ats_sweep, "_save_state", lambda keys: None),
+            # cadence.save() writes into the REAL personal/data. Patching
+            # _save_state but not this one left 14 fake companies (g0, w1...)
+            # in the user's live cadence file. Tests do not touch real data.
+            patch.object(ats_sweep.cadence, "save", lambda path, data: None),
             patch.object(ats_sweep, "PER_CALL_PAUSE", 0.01),
             patch.object(ats_sweep, "JITTER", 0.002),
         ):
@@ -277,3 +281,7 @@ class TestParallelByAts(unittest.TestCase):
             ats_sweep._LAST_HIT.clear()
         # greenhouse (6) + ashby (3) still land; workday's 5 are lost, not fatal
         self.assertEqual(len(rows), 9)
+
+
+if __name__ == "__main__":
+    unittest.main()

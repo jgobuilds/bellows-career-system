@@ -222,10 +222,6 @@ class TestLabels(unittest.TestCase):
             self.assertTrue(work_auth.label(verdict))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestUserStatus(unittest.TestCase):
     """The user's own status is a NAMED key, so the dashboard dropdown,
     userconfig.py, and concern() cannot drift apart."""
@@ -302,3 +298,7 @@ class TestConfigRewrite(unittest.TestCase):
 
         for status in work_auth.STATUSES:
             ast.parse(work_auth.render_config_block(status))
+
+
+if __name__ == "__main__":
+    unittest.main()

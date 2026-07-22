@@ -79,10 +79,6 @@ class TestJobsHelpers(unittest.TestCase):
         self.assertIsNone(store.normalize_doc({}).get("doc"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestNormalizeChecks(unittest.TestCase):
     """`checks` must reach jobs.json as [[status, text], ...].
 
@@ -120,3 +116,7 @@ class TestNormalizeChecks(unittest.TestCase):
         rec = store.normalize_doc({"doc": "applications/burq/", "checks": "a; b"})
         self.assertEqual(rec["doc"], "burq")
         self.assertEqual(len(rec["checks"]), 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
