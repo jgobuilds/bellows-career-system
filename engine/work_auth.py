@@ -80,10 +80,16 @@ _RULES: list[tuple[Verdict, str]] = [
     ),
     ("no_sponsorship", r"\bno\s+(?:visa\s+|employer\s+|immigration\s+)?sponsor\w*"),
     ("no_sponsorship", r"sponsorship\s+is\s+not\s+(?:available|offered|provided)"),
-    ("no_sponsorship", r"without\s+(?:the\s+need\s+for\s+)?(?:visa\s+|employer\s+)?sponsorship"),
+    # "without X sponsorship" where X is any short qualifier. The original spelled
+    # out visa/employer and so missed "without COMPANY sponsorship" — the exact
+    # wording on a real posting, and one of the commonest forms there is.
+    ("no_sponsorship", r"without\s+(?:\w+\s+){0,3}?sponsor\w*"),
+    # "eligible to work" is as common as "authorized to work"; matching only the
+    # latter missed half of these outright.
     (
         "no_sponsorship",
-        r"authoriz\w*\s+to\s+work[^.]{0,60}?without[^.]{0,20}?sponsor\w*",
+        r"(?:authoriz\w*|eligible|legally\s+able)\s+to\s+work[^.]{0,60}?"
+        r"without[^.]{0,25}?sponsor\w*",
     ),
     # 5. Sponsorship, POSITIVE.
     ("sponsors", r"(?:visa\s+)?sponsorship\s+(?:is\s+)?(?:available|offered|provided)"),

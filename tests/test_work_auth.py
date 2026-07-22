@@ -48,6 +48,28 @@ class TestNegationBeatsPositive(unittest.TestCase):
             work_auth.classify("No visa sponsorship is offered.").verdict, "no_sponsorship"
         )
 
+    def test_without_company_sponsorship(self):
+        """Regression from a real posting (The Hartford, AVP Applied AI).
+
+        The pattern spelled out "visa" and "employer" as the only qualifiers, so
+        "without COMPANY sponsorship" — one of the commonest phrasings there is —
+        classified as unstated and the flag never fired.
+        """
+        f = work_auth.classify("Must be eligible to work in the US without company sponsorship.")
+        self.assertEqual(f.verdict, "no_sponsorship")
+        self.assertIn("sponsor", f.evidence.lower())
+
+    def test_eligible_to_work_reads_like_authorized_to_work(self):
+        text = "Applicants must be legally able to work without visa sponsorship."
+        self.assertEqual(work_auth.classify(text).verdict, "no_sponsorship")
+
+    def test_without_alone_does_not_fire(self):
+        # the broadened "without ... sponsorship" must still need the sponsorship word
+        self.assertEqual(
+            work_auth.classify("This role requires collaboration without silos.").verdict,
+            "unstated",
+        )
+
     def test_positive_sponsorship_still_reads_as_positive(self):
         self.assertEqual(
             work_auth.classify("Visa sponsorship is available for this position.").verdict,
