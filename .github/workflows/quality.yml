@@ -63,3 +63,36 @@ jobs:
       #   <0.14 upper pin, then drop this ignore and let the bump flow through.
       - name: Dependency audit (pip-audit)
         run: pip-audit --ignore-vuln PYSEC-2026-1604
+
+  # Push CI failures to a channel (autonomous insight). Channel-configurable via
+  # the NOTIFY_KIND variable — Slack default, Teams, or generic webhook. No-ops
+  # when the URL secret is unset. Setup: ai-standards/references/ci-notifications.md.
+  # Kept identical across the fleet on purpose (each repo stands alone).
+  notify:
+    needs: python
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify on failure
+        env:
+          KIND: ${{ vars.NOTIFY_KIND || 'slack' }}
+          SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TEAMS_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+        run: |
+          case "$KIND" in
+            slack) URL="$SLACK_URL" ;;
+            teams) URL="$TEAMS_URL" ;;
+            *)     URL="$WEBHOOK_URL" ;;
+          esac
+          if [ -z "$URL" ]; then
+            echo "No webhook URL for NOTIFY_KIND=$KIND — skipping."
+            exit 0
+          fi
+          MSG="❌ CI failed: $GITHUB_REPOSITORY @ ${GITHUB_SHA:0:8} on $GITHUB_REF_NAME
+          $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          case "$KIND" in
+            teams) BODY=$(jq -nc --arg t "$MSG" '{"@type":"MessageCard","@context":"http://schema.org/extensions","summary":"CI failure","themeColor":"D64545","text":$t}') ;;
+            *)     BODY=$(jq -nc --arg t "$MSG" '{text:$t}') ;;
+          esac
+          curl -fsS -X POST -H 'content-type: application/json' -d "$BODY" "$URL"             || echo "notify POST failed (non-fatal) — CI status already shows the failure"
