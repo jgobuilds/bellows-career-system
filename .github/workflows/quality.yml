@@ -80,6 +80,7 @@ jobs:
           SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEAMS_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          MENTION: ${{ vars.NOTIFY_SLACK_MENTION }}
         run: |
           case "$KIND" in
             slack) URL="$SLACK_URL" ;;
@@ -93,11 +94,19 @@ jobs:
           SHA="${GITHUB_SHA:0:8}"
           RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           FALLBACK="CI failed: $GITHUB_REPOSITORY @ $SHA on $GITHUB_REF_NAME - $RUN"
+          # Optional Slack mention so a failure actively notifies, not just
+          # posts. Slack-only syntax; ignored for teams/webhook. Set the
+          # NOTIFY_SLACK_MENTION repo variable to: channel | here | <@U…> | <!subteam^…>.
+          case "$MENTION" in
+            channel) MENTION="<!channel>" ;;
+            here)    MENTION="<!here>" ;;
+            *)       : ;;  # empty stays empty; raw tokens pass through
+          esac
           # jq (preinstalled on runners) builds every payload — no shell text is
           # interpolated into JSON, so a hostile branch name cannot break it.
           case "$KIND" in
             slack)
-              BODY=$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg sha "$SHA" --arg branch "$GITHUB_REF_NAME" --arg run "$RUN" --arg fb "$FALLBACK" '{ text: $fb, blocks: [ { type:"section", text:{ type:"mrkdwn", text:(":x: *CI failed* — `" + $repo + "`") } }, { type:"section", fields:[ { type:"mrkdwn", text:("*Branch:* " + $branch) }, { type:"mrkdwn", text:("*Commit:* `" + $sha + "`") } ] }, { type:"actions", elements:[ { type:"button", text:{ type:"plain_text", text:"View run" }, url:$run, style:"danger" } ] } ] }') ;;
+              BODY=$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg sha "$SHA" --arg branch "$GITHUB_REF_NAME" --arg run "$RUN" --arg fb "$FALLBACK" --arg mention "$MENTION" '($mention | if . == "" then "" else . + " " end) as $m | { text: ($m + $fb), blocks: [ { type:"section", text:{ type:"mrkdwn", text:($m + ":x: *CI failed* — `" + $repo + "`") } }, { type:"section", fields:[ { type:"mrkdwn", text:("*Branch:* " + $branch) }, { type:"mrkdwn", text:("*Commit:* `" + $sha + "`") } ] }, { type:"actions", elements:[ { type:"button", text:{ type:"plain_text", text:"View run" }, url:$run, style:"danger" } ] } ] }') ;;
             teams)
               BODY=$(jq -nc --arg t "$FALLBACK" '{"@type":"MessageCard","@context":"http://schema.org/extensions","summary":"CI failure","themeColor":"D64545","text":$t}') ;;
             *)
