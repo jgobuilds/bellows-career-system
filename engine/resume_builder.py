@@ -253,15 +253,6 @@ def _bullet(d, lead, rest):
     _run(p, rest)
 
 
-def _plain_bullet(d, text):
-    """Understated bullet (no bold lead-in) — used for earlier/older roles."""
-    p = _para(d, before=1, after=1)
-    p.paragraph_format.left_indent = Inches(0.18)
-    p.paragraph_format.first_line_indent = Inches(-0.18)
-    _run(p, "•  ")
-    _run(p, text)
-
-
 def _competencies(d, comp_lines, columns=2):
     """Render competencies as tab-stop-aligned columns so they line up cleanly.
 
@@ -337,6 +328,17 @@ def build_resume(spec, out_path):
             else:
                 _role_block(entry["title"], entry["location_dates"], entry["bullets"], before=0)
 
+        # Older roles live in the SAME section now, not a separate "Earlier
+        # Experience" block (changed 2026-07-22). They are the oldest entries, so
+        # reverse-chron puts them last, and folding them in drops one of the three
+        # experience-like sections a résumé parser has to segment — one suspect in
+        # the Workday import dropping the current role entirely. Same block format
+        # as any other entry; a bullet is optional and usually absent for old roles.
+        for role in spec.get("earlier", []):
+            _run(_para(d, before=6), role["company"], bold=True, size=11)
+            bullets = [["", role["bullet"]]] if role.get("bullet") else []
+            _role_block(role["title"], role["location_dates"], bullets, before=0)
+
     def _emit_education():
         if spec.get("education") or spec.get("certs"):
             _section(d, "Education & Certifications")
@@ -379,16 +381,6 @@ def build_resume(spec, out_path):
                 _run(_para(d, after=1), entry["location_dates"])
                 for lead, rest in entry.get("bullets", []):
                     _bullet(d, lead, rest)
-        if part == "experience" and spec.get("earlier"):
-            # Earlier Experience always trails the main experience block, wherever it sits.
-            _section(d, "Earlier Experience")
-            for role in spec["earlier"]:
-                _run(_para(d, before=4), role["company"], bold=True)
-                _run(_para(d), role["title"])
-                _run(_para(d), role["location_dates"])
-                if role.get("bullet"):
-                    _plain_bullet(d, role["bullet"])
-
     d.save(out_path)
     return warns
 
