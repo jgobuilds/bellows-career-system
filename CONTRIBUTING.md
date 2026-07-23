@@ -11,8 +11,18 @@ git clone https://github.com/YOUR-USERNAME/bellows-career-system.git
 cd bellows-career-system
 python setup.py                                   # scaffolds gitignored personal/ from the templates
 pip install -r requirements.txt -r requirements-dev.txt
-pre-commit install                                # runs the lint gate before each commit
+pre-commit install                                # lint + hygiene gate before each commit
+# pre-PUSH gate: reproduces CI's environment before every push (~15s). Plain script,
+# NOT `pre-commit install --hook-type pre-push` (that hangs on Windows — see
+# .pre-commit-config.yaml). Install it once:
+printf '#!/bin/sh\nexec python tools/ci_local.py\n' > .git/hooks/pre-push
+chmod +x .git/hooks/pre-push
 ```
+
+`tools/ci_local.py` runs the full gate (ruff, format, tests, mypy) against a
+scaffolded **template** config in a temp copy of the tracked tree — i.e. what CI
+sees, not your filled-in `personal/`. A test that depends on your config passes
+locally and fails in CI; this catches that before the push.
 
 ## The everyday commands
 

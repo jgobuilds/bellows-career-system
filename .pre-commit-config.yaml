@@ -1,12 +1,14 @@
 # Local quality gate — runs before every commit so problems never reach CI.
-# Install once per clone:  pre-commit install --hook-type pre-commit --hook-type pre-push
+# Install once per clone (pre-COMMIT stage only):  pre-commit install
 #
-# The pre-PUSH hook is the important one. Your local test run uses YOUR filled-in
-# personal/userconfig.py; CI scaffolds the blank template. A test that quietly
-# depends on your config passes here and fails there, every time. That shipped
-# twice. tools/ci_local.py runs the gate in CI's environment instead of yours.
-# (mypy runs in CI, not here — it needs the project deps + scaffolded config that
-#  pre-commit's isolated envs don't have.)
+# Do NOT run `pre-commit install --hook-type pre-push`. Wrapping the CI gate in the
+# pre-commit framework ran the commit-stage hooks (trailing-whitespace, etc.) at
+# push time and HUNG on Windows (2026-07-22). The pre-push gate is a plain script
+# instead — .git/hooks/pre-push runs `python tools/ci_local.py` directly (~15s),
+# which reproduces CI's scaffolded-template environment. Recreate it on a fresh
+# clone with:  printf '#!/bin/sh\\nexec python tools/ci_local.py\\n' > .git/hooks/pre-push
+# (see CONTRIBUTING.md). It catches config-dependent tests that pass locally but
+# fail in CI — the failure mode that shipped twice.
 minimum_pre_commit_version: "3.5.0"
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -27,12 +29,6 @@ repos:
         args: [--fix]
       - id: ruff-format                # format (black-compatible)
 
-  - repo: local
-    hooks:
-      - id: ci-local
-        name: CI gate in CI's environment (template config, tracked tree)
-        entry: python tools/ci_local.py
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
+# The CI gate (tools/ci_local.py) is intentionally NOT a pre-commit hook here — see
+# the header. It runs as a plain .git/hooks/pre-push script to avoid the framework
+# hang on Windows.
