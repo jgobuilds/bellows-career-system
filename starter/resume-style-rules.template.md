@@ -164,3 +164,21 @@ The gates are hard stops, not suggestions — the whole system exists so a human
 
 ## 12. Pre-send check: no unresolved placeholders in any deliverable (adopted 2026-07-16 from "annie")
 Before ANY generated file or answer is handed over as final, scan it and confirm ZERO unresolved fill-ins survive: no `[bracketed]` prompts, no `{{tokens}}`, no `[NEED METRIC]`, no `[CONFIRM]`, no `<placeholder>` left in the text. A leftover bracket in a submitted résumé or answer is exactly the failure this system exists to prevent (it reads as careless and can leak the internal scaffolding). If a placeholder can't be resolved from the profile, it's a refuse-and-ask (§10), not something to ship with the bracket still in it. State "placeholder scan: clean" when presenting a finished document.
+
+## 13. Application folder naming: `company-role` (adopted 2026-07-22)
+
+Each tailored application lives in `personal/applications/<slug>/`. The slug is
+**`company-rolehint`**, not company alone — because one company can have more than
+one open role. This is not hypothetical: The Hartford has two live applications
+(`the-hartford-avp` for AVP Applied AI, plus an earlier AVP Data Platform). A
+company-only slug would make the second application silently overwrite the first.
+
+- Keep the company part short (`mazda`, not `mazda-north-american-operations`) and
+  the role hint 1-2 significant words (`ai-transformation`, `data-governance`).
+- The job's `doc` field in `jobs.json` must equal the folder slug — that pointer is
+  what the dashboard uses to find the documents. Set it when the folder is created;
+  a missing `doc` means the built résumé/cover exist but the dashboard cannot show
+  them (a bug we had to repair for eight folders on 2026-07-22).
+- Status lives in `jobs.json` ONLY. Do not encode applied/submitted state in the
+  folder location (no `submitted/` subfolder) — that would duplicate the one source
+  of truth. The dashboard kanban is the active-vs-done view.
