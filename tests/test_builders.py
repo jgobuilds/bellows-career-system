@@ -309,5 +309,79 @@ class TestAdvisorySection(unittest.TestCase):
         self.assertEqual([w for w in resume_builder.validate(spec) if "chronological" in w], [])
 
 
+class TestEarlierFoldedIntoExperience(unittest.TestCase):
+    """Older roles render inside the one Professional Experience section, not a
+    separate "Earlier Experience" block. Three experience-like sections were a
+    suspect in a Workday import dropping the current role (2026-07-22)."""
+
+    def _spec(self):
+        return {
+            "name": "Test Person",
+            "contact": "City, ST | test@example.com",
+            "level": "executive",
+            "summary": "A leader.",
+            "competencies": ["A | B"],
+            "skills": [["Tools:  ", "X, Y"]],
+            "education": [["MS, Field", ", University"]],
+            "experience": [
+                {
+                    "company": "Optimum",
+                    "title": "Director of Data",
+                    "location_dates": "City, ST | April 2024 - Present",
+                    "bullets": [["Led", " a team."]],
+                }
+            ],
+            "earlier": [
+                {
+                    "company": "Old Employer",
+                    "title": "Business Analyst",
+                    "location_dates": "City, ST | October 2008 - March 2012",
+                }
+            ],
+        }
+
+    def _paras(self, spec):
+        import os
+        import tempfile
+
+        import docx as _docx
+
+        with tempfile.TemporaryDirectory() as d:
+            out = os.path.join(d, "r.docx")
+            resume_builder.build_resume(spec, out)
+            return [p.text.strip() for p in _docx.Document(out).paragraphs if p.text.strip()]
+
+    def test_no_earlier_experience_header(self):
+        self.assertNotIn("Earlier Experience", self._paras(self._spec()))
+
+    def test_old_role_is_inside_professional_experience(self):
+        paras = self._paras(self._spec())
+        exp = paras.index("Professional Experience")
+        old = paras.index("Old Employer")
+        edu = paras.index("Education & Certifications")
+        # the old employer sits after the experience header and before Education,
+        # with no other section header intervening
+        self.assertLess(exp, old)
+        self.assertLess(old, edu)
+
+    def test_advisory_still_comes_after_the_folded_experience(self):
+        spec = self._spec()
+        spec["advisory"] = [
+            {
+                "company": "Self-Employed",
+                "title": "Fractional Head of Data",
+                "location_dates": "City, ST | September 2023 - April 2026",
+                "bullets": [["Advised", " a client."]],
+            }
+        ]
+        paras = self._paras(spec)
+        self.assertLess(paras.index("Old Employer"), paras.index("Advisory & Consulting"))
+
+    def test_no_earlier_key_is_fine(self):
+        spec = self._spec()
+        del spec["earlier"]
+        self.assertNotIn("Earlier Experience", self._paras(spec))
+
+
 if __name__ == "__main__":
     unittest.main()
