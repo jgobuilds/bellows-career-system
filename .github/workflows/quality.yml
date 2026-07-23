@@ -65,9 +65,10 @@ jobs:
         run: pip-audit --ignore-vuln PYSEC-2026-1604
 
   # Push CI failures to a channel (autonomous insight). Channel-configurable via
-  # the NOTIFY_KIND variable — Slack default, Teams, or generic webhook. No-ops
-  # when the URL secret is unset. Setup: ai-standards/references/ci-notifications.md.
-  # Kept identical across the fleet on purpose (each repo stands alone).
+  # the NOTIFY_KIND variable — Slack (Block Kit) default, Teams (MessageCard), or
+  # generic webhook. No-ops when the URL secret is unset. Setup + payload detail:
+  # ai-standards/references/ci-notifications.md. Kept identical across the fleet
+  # on purpose (each repo stands alone); that file is its single source of truth.
   notify:
     needs: python
     if: failure()
@@ -89,10 +90,17 @@ jobs:
             echo "No webhook URL for NOTIFY_KIND=$KIND — skipping."
             exit 0
           fi
-          MSG="❌ CI failed: $GITHUB_REPOSITORY @ ${GITHUB_SHA:0:8} on $GITHUB_REF_NAME
-          $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          SHA="${GITHUB_SHA:0:8}"
+          RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          FALLBACK="CI failed: $GITHUB_REPOSITORY @ $SHA on $GITHUB_REF_NAME - $RUN"
+          # jq (preinstalled on runners) builds every payload — no shell text is
+          # interpolated into JSON, so a hostile branch name cannot break it.
           case "$KIND" in
-            teams) BODY=$(jq -nc --arg t "$MSG" '{"@type":"MessageCard","@context":"http://schema.org/extensions","summary":"CI failure","themeColor":"D64545","text":$t}') ;;
-            *)     BODY=$(jq -nc --arg t "$MSG" '{text:$t}') ;;
+            slack)
+              BODY=$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg sha "$SHA" --arg branch "$GITHUB_REF_NAME" --arg run "$RUN" --arg fb "$FALLBACK" '{ text: $fb, blocks: [ { type:"section", text:{ type:"mrkdwn", text:(":x: *CI failed* — `" + $repo + "`") } }, { type:"section", fields:[ { type:"mrkdwn", text:("*Branch:* " + $branch) }, { type:"mrkdwn", text:("*Commit:* `" + $sha + "`") } ] }, { type:"actions", elements:[ { type:"button", text:{ type:"plain_text", text:"View run" }, url:$run, style:"danger" } ] } ] }') ;;
+            teams)
+              BODY=$(jq -nc --arg t "$FALLBACK" '{"@type":"MessageCard","@context":"http://schema.org/extensions","summary":"CI failure","themeColor":"D64545","text":$t}') ;;
+            *)
+              BODY=$(jq -nc --arg t "$FALLBACK" '{text:$t}') ;;
           esac
-          curl -fsS -X POST -H 'content-type: application/json' -d "$BODY" "$URL"             || echo "notify POST failed (non-fatal) — CI status already shows the failure"
+          curl -fsS -X POST -H 'content-type: application/json' -d "$BODY" "$URL" || echo "notify POST failed (non-fatal) — CI status already shows the failure"
