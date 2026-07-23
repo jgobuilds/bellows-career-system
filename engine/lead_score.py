@@ -38,6 +38,15 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 # =============================================================================
 # All personal settings live in ONE place: config.py. Nothing to edit here.
 # =============================================================================
+# DEFERRED REFACTOR (agreed 2026-07-22) — next substantive edit to this file:
+# extract a `Scorer(config)` class. The compiled rules below (GEO_*, LANE_*,
+# LEVEL_*) are baked into module globals AT IMPORT from whatever config is loaded.
+# That import-time binding is why CI broke twice: tests can't score against a
+# second config without re-importing, so they resort to deriving expected values
+# from "whatever's loaded" (_in_range_place / _excluded_place). A Scorer holding
+# the compiled rules as instance state makes `Scorer(template_cfg)` vs
+# `Scorer(jon_cfg)` explicit and kills the local-vs-CI divergence at the root.
+# Do it opportunistically WITH the next real change here, not as a standalone pass.
 import career_ladder
 import config as CFG
 import jobkey  # the one canonical job-identity module (dedupe vs. pipeline.md)

@@ -20,7 +20,7 @@ pre-commit install                                # runs the lint gate before ea
 python -m unittest discover -s tests   # run the tests (stdlib unittest; pytest also works)
 ruff check .                           # lint against pyproject.toml [tool.ruff]
 ruff check . --fix                     # auto-fix what's safe
-python engine/test_links.py            # integration smoke: every dashboard link resolves
+python tools/test_links.py            # integration smoke: every dashboard link resolves
 ```
 
 `bellows.bat` / `./bellows.sh` launches the Career Hub for manual testing.
