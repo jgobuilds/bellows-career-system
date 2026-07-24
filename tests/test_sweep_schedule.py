@@ -135,12 +135,25 @@ class ConflictTest(unittest.TestCase):
     def setUp(self):
         self._run = sweep_schedule._run
         self._win = sweep_schedule.is_windows
+        self._which = sweep_schedule._schtasks
         sweep_schedule.is_windows = lambda: True
+        # Also stub the schtasks lookup. On Linux CI shutil.which() finds nothing,
+        # so supported() short-circuits and find_conflicts() returns [] before it
+        # ever reaches the stubbed output — which quietly turned every assertNotIn
+        # in this class into a vacuous pass.
+        sweep_schedule._schtasks = lambda: "schtasks"
         self.addCleanup(lambda: setattr(sweep_schedule, "_run", self._run))
         self.addCleanup(lambda: setattr(sweep_schedule, "is_windows", self._win))
+        self.addCleanup(lambda: setattr(sweep_schedule, "_schtasks", self._which))
 
     def _stub(self, stdout, rc=0):
         sweep_schedule._run = lambda _args: subprocess.CompletedProcess([], rc, stdout, "")
+
+    def test_the_stub_is_actually_reached(self):
+        """Guard against the whole class passing vacuously on a non-Windows runner."""
+        self._stub(ALL_TASKS_XML)
+        self.assertTrue(sweep_schedule.supported()[0])
+        self.assertEqual(len(sweep_schedule.find_conflicts()), 1)
 
     def test_finds_a_differently_named_task_running_the_same_sweep(self):
         self._stub(ALL_TASKS_XML)
