@@ -1,6 +1,6 @@
 # engine/ — the map
 
-Twenty-one modules in one flat directory looks like a lot. It isn't tangled: the
+Twenty-two modules in one flat directory looks like a lot. It isn't tangled: the
 imports form a clean one-directional DAG (no cycles), and the files group into five
 families along a single pipeline. This is the map; read it before assuming complexity.
 
@@ -37,7 +37,8 @@ families along a single pipeline. This is the map; read it before assuming compl
 - `career_ladder` — map titles to a rung, generate level terms from a target
 
 **serving** — the local app
-- `server` — the Hub app server (`bellows.bat`/`bellows.sh` run this); serves `hub.html`, saves status changes, runs the sweep button
+- `server` — the Hub app server (`bellows.bat`/`bellows.sh` run this); serves `hub.html`, saves status changes, runs the sweep button, reports sweep freshness (`/api/sweep-cadence`) and owns the schedule endpoints
+- `sweep_schedule` — registers/queries/removes the recurring sweep in Windows Task Scheduler via `schtasks`, and detects other tasks already running a sweep so two don't stack
 - `hub.html` — the single-page dashboard (not a module)
 
 **infra**
@@ -54,6 +55,7 @@ Most files have a `__main__`, but only a handful are user-facing commands:
 | `python engine/jobspy_sweep.py` | a sweep (calls `ats_sweep` + board recall) |
 | `python engine/build_application.py <dir>` | build a tailored résumé + cover |
 | `python engine/cadence.py` | posting-rhythm report + next-sweep recommendation |
+| `python engine/sweep_schedule.py [install N HH:MM \| remove]` | inspect or change the scheduled sweep (the Hub drives this for you) |
 
 The rest (`docx_finalize`, `add_jobs_batch`, `triage_leads`, `pipeline_store`, …) are
 internal steps the above call, or helpers imported by other modules.

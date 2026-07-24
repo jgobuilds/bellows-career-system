@@ -132,6 +132,37 @@
   /* pipeline toolbar: sweep + filters */
   .ptoolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:2px 0 10px;}
   .ptoolbar .grow{flex:1;}
+  /* sweep freshness chip: "when did we last look, and is it worth looking again" */
+  .swcad{font-size:12.5px;color:var(--grey);display:inline-flex;align-items:center;gap:5px;
+         white-space:nowrap;cursor:help;}
+  .swcad b{color:var(--ink);font-weight:600;}
+  .swcad .dot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:none;}
+  .swcad.due{color:var(--warn);}
+  .swcad.due b{color:var(--warn);}
+  .swcad.due .dot{background:var(--warn);}
+  /* the cadence read-out inside the sweep modal */
+  .cadbox{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;
+          background:var(--chip);}
+  .cadbox .hdr{display:flex;align-items:baseline;justify-content:space-between;gap:10px;
+               font-size:13.5px;margin-bottom:6px;}
+  .cadbox .why{font-size:12px;color:var(--grey);}
+  .cadtable{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+  .cadtable th{text-align:left;font-weight:600;color:var(--grey);padding:3px 8px 3px 0;font-size:11.5px;}
+  .cadtable td{padding:3px 8px 3px 0;border-top:1px solid var(--line);color:var(--ink);}
+  .cadtable td.g{color:var(--grey);}
+  /* scheduled-sweep control */
+  .schedbox{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+  .schedbox .row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+  .schedbox label{font-size:12.5px;color:var(--grey);}
+  .schedbox .note{font-size:12px;color:var(--grey);margin-top:8px;line-height:1.45;}
+  .schedbox code{font-size:11.5px;background:var(--chip);padding:1px 5px;border-radius:4px;
+                 word-break:break-all;}
+  .schedon{font-size:12.5px;color:var(--good);font-weight:600;}
+  .schedoff{font-size:12.5px;color:var(--grey);}
+  .minibtn{font:inherit;font-size:12.5px;padding:5px 11px;border-radius:8px;cursor:pointer;
+           border:1px solid var(--line);background:var(--paper);color:var(--ink);}
+  .minibtn.pri{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:600;}
+  .minibtn:disabled{opacity:.55;cursor:default;}
   .sweepbtn{font:inherit;font-size:13px;font-weight:700;color:#fff;background:var(--blue);border:1px solid var(--blue);border-radius:9px;padding:8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
   .sweepbtn:hover{filter:brightness(1.06);}
   .fsearch{font:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);min-width:150px;}
@@ -303,6 +334,8 @@
 <div class="modal-bg" id="sweepbg" onclick="if(event.target===this)closeSweep()"><div class="modal">
   <div class="mh"><b>Run the lead sweep</b><button class="x" onclick="closeSweep()">&times;</button></div>
   <div style="padding:18px 20px">
+    <div id="sw-cadence"></div>
+    <div id="sw-sched"></div>
     <div class="muted" style="margin-bottom:12px">Polls company ATS feeds + boards for fresh, in-lane roles and writes them to your leads file — nothing leaves your machine. When it finishes, say <b>“leads have been updated, process them”</b> and I'll validate, score, and add them to the pipeline.</div>
     <button class="sweepbtn" id="sw-run" style="width:100%;justify-content:center" onclick="runSweepNow()">⟳ Run sweep now</button>
     <div id="sw-status" class="muted" style="margin-top:10px"></div>
@@ -539,8 +572,184 @@ function parseHash(){
   return {tab:(tab&&allKeys().includes(tab))?tab:null, jobId:(jid&&!isNaN(jid))?jid:null};
 }
 
+// ---------- sweep freshness + cadence ----------
+// One fetch feeds two surfaces: the compact chip in the pipeline toolbar and the
+// fuller read-out in the sweep modal. Cached so opening the modal is instant, and
+// refreshed after a sweep finishes (the timestamp it reports has just changed).
+let CADENCE=null;
+function agoText(days){
+  if(days===0) return 'today';
+  if(days===1) return 'yesterday';
+  return days+' days ago';
+}
+function refreshCadence(){
+  return fetch('/api/sweep-cadence',{cache:'no-store'}).then(r=>r.json())
+    .then(c=>{ CADENCE=c; paintCadence(); return c; })
+    .catch(()=>{});  // the chip is an enhancement — a failure must not break the board
+}
+function paintCadence(){
+  const c=CADENCE; if(!c) return;
+  const chip=document.getElementById('sw-chip');
+  if(chip){
+    if(!c.swept){
+      chip.className='swcad'; chip.title='No sweep has run yet.';
+      chip.innerHTML='<span class="dot" style="background:var(--grey)"></span>Never swept';
+    }else{
+      const due=c.due;
+      chip.className='swcad'+(due?' due':'');
+      chip.title=c.basis+'  ('+c.companies_used+' of '+c.boards+' boards have a readable rhythm)';
+      let tail;
+      if(due){
+        tail=c.overdue_by===0?'due now':'due '+c.overdue_by+'d ago';
+      }else{
+        tail='next in '+Math.abs(c.overdue_by)+'d';
+      }
+      chip.innerHTML='<span class="dot"></span>Swept <b>'+esc(agoText(c.days_since))+'</b> · '+esc(tail);
+    }
+  }
+  const box=document.getElementById('sw-cadence');
+  if(box) box.innerHTML=cadenceBox(c);
+}
+function cadenceBox(c){
+  if(!c) return '';
+  if(!c.swept){
+    return '<div class="cadbox"><div class="hdr"><b>No sweep has run yet</b></div>'+
+           '<div class="why">'+esc(c.reason||'')+' Run one below and the boards’ own posting dates will set the cadence from here on.</div></div>';
+  }
+  const verdict = c.due
+    ? (c.overdue_by===0 ? 'Due today' : 'Overdue by '+c.overdue_by+' day'+(c.overdue_by===1?'':'s'))
+    : 'Not due for '+Math.abs(c.overdue_by)+' day'+(Math.abs(c.overdue_by)===1?'':'s');
+  let html='<div class="cadbox">'+
+    '<div class="hdr"><b>Last swept '+esc(agoText(c.days_since))+'</b>'+
+    '<span style="color:var(--'+(c.due?'warn':'grey')+')">'+esc(verdict)+'</span></div>'+
+    '<div class="why">Recommended every <b>'+c.interval_days+' days</b>'+
+    (c.due_on?', so next on <b>'+esc(c.due_on)+'</b>':'')+'. '+esc(c.basis)+'. '+
+    esc(c.companies_used+' of '+c.boards+' tracked boards post often enough to read a rhythm; '+
+        'the rest ride along at no extra cost.')+'</div>';
+  if(c.active && c.active.length){
+    html+='<table class="cadtable"><tr><th>Board</th><th>Posts every</th><th>Last posting</th><th>Pattern</th></tr>';
+    c.active.forEach(function(a){
+      const pat=[a.weekday,a.monthday].filter(Boolean).join(', ');
+      html+='<tr><td>'+esc(a.key)+'</td>'+
+            '<td class="g">'+(a.approx?'~':'')+a.gap+'d</td>'+
+            '<td class="g">'+esc(a.last_post||'—')+'</td>'+
+            '<td class="g">'+esc(pat||'no fixed day')+'</td></tr>';
+    });
+    html+='</table>';
+  }
+  return html+'</div>';
+}
+
+// ---------- scheduled sweep (OS task scheduler) ----------
+// The interval defaults to whatever the boards imply, so the common case is one
+// click. Anything the user picks explicitly wins and is not silently re-tuned.
+let SCHED=null;
+function refreshSchedule(){
+  return fetch('/api/sweep-schedule',{cache:'no-store'}).then(r=>r.json())
+    .then(s=>{ SCHED=s; paintSchedule(); return s; })
+    .catch(()=>{});
+}
+function schedOptions(sel){
+  const rec = CADENCE && CADENCE.swept ? CADENCE.interval_days : null;
+  const vals=[1,2,3,5,7,14,30];
+  if(rec && vals.indexOf(rec)<0) vals.push(rec);
+  vals.sort((a,b)=>a-b);
+  return vals.map(function(v){
+    const label = v===1 ? 'Every day' : 'Every '+v+' days';
+    return '<option value="'+v+'"'+(v===sel?' selected':'')+'>'+label+
+           (v===rec?' (recommended)':'')+'</option>';
+  }).join('');
+}
+function paintSchedule(){
+  const box=document.getElementById('sw-sched'); if(!box||!SCHED) return;
+  const s=SCHED;
+  if(!s.supported){
+    let h='<div class="schedbox"><div class="schedoff">Automatic scheduling unavailable</div>'+
+          '<div class="note">'+esc(s.reason||'')+'</div>';
+    if(s.cron) h+='<div class="note"><code>'+esc(s.cron)+'</code></div>';
+    box.innerHTML=h+'</div>'; return;
+  }
+  const rec = CADENCE && CADENCE.swept ? CADENCE.interval_days : 7;
+  const days = s.installed && s.days ? s.days : rec;
+  const at   = s.installed && s.at ? s.at : '07:30';
+  let h='<div class="schedbox">'+
+    '<div class="row">'+
+      '<span class="'+(s.installed?'schedon':'schedoff')+'" style="margin-right:auto">'+
+        (s.installed?'⏱ Scheduled sweep is ON':'Scheduled sweep is off')+'</span>'+
+    '</div>'+
+    '<div class="row" style="margin-top:9px">'+
+      '<label for="sch-days">Run</label>'+
+      '<select class="fsel" id="sch-days">'+schedOptions(days)+'</select>'+
+      '<label for="sch-at">at</label>'+
+      '<input class="fsel" id="sch-at" type="time" value="'+esc(at)+'" style="width:110px">'+
+      '<button class="minibtn pri" id="sch-save">'+(s.installed?'Update':'Schedule it')+'</button>'+
+      (s.installed?'<button class="minibtn" id="sch-off">Turn off</button>':'')+
+    '</div>';
+  if(s.installed){
+    h+='<div class="note">Task <code>'+esc(s.task_name)+'</code>'+
+       (s.next_run?' · next run <b>'+esc(s.next_run)+'</b>':'')+
+       '. Runs while you are logged in. If the machine is off or asleep at that time the run is '+
+       'skipped rather than queued, and it waits for the next slot. You can see or cancel it in '+
+       'Windows Task Scheduler at any time.</div>';
+  }else{
+    h+='<div class="note">Registers a normal user-level Windows task. No admin rights, no stored '+
+       'password, and it runs the same local sweep as the button below - it never applies to anything.</div>';
+  }
+  // A second task running the same sweep is the duplicate that actually happens:
+  // /F makes re-registering OUR name harmless, so only a different name can stack.
+  if(s.conflicts && s.conflicts.length){
+    h+='<div class="note" style="color:var(--warn);border-top:1px solid var(--line);'+
+       'margin-top:10px;padding-top:9px"><b>⚠ '+s.conflicts.length+' other scheduled task'+
+       (s.conflicts.length===1?'':'s')+' already run'+(s.conflicts.length===1?'s':'')+
+       ' a Bellows sweep.</b> Leaving them in place means the same ATS feeds get polled twice. '+
+       'Remove them in Windows Task Scheduler - this app only manages <code>'+esc(s.task_name)+
+       '</code> and will not touch a task it did not create.'+
+       s.conflicts.map(function(c){
+         return '<div style="margin-top:5px"><code>'+esc(c.name)+'</code></div>';
+       }).join('')+'</div>';
+  }
+  h+='<div class="note" id="sch-msg"></div></div>';
+  box.innerHTML=h;
+  const save=document.getElementById('sch-save');
+  if(save) save.onclick=function(){ saveSchedule('install'); };
+  const off=document.getElementById('sch-off');
+  if(off) off.onclick=function(){ saveSchedule('remove'); };
+}
+function saveSchedule(action){
+  const msg=document.getElementById('sch-msg');
+  const save=document.getElementById('sch-save'), off=document.getElementById('sch-off');
+  const body = action==='remove' ? {action:'remove'} : {
+    action:'install',
+    days: parseInt(document.getElementById('sch-days').value,10),
+    at: document.getElementById('sch-at').value
+  };
+  [save,off].forEach(function(b){ if(b) b.disabled=true; });
+  if(msg) msg.textContent='Talking to the task scheduler…';
+  fetch('/api/sweep-schedule',{method:'POST',headers:{'Content-Type':'application/json'},
+                               body:JSON.stringify(body)})
+    .then(r=>r.json()).then(function(j){
+      if(!j.ok){
+        [save,off].forEach(function(b){ if(b) b.disabled=false; });
+        if(msg) msg.innerHTML='<b style="color:#c0554a">'+esc(j.error||'Could not update the schedule.')+'</b>';
+        return;
+      }
+      SCHED=j.schedule; paintSchedule();
+      toast(action==='remove' ? 'Scheduled sweep turned off'
+            : (j.schedule.changed===false ? 'Already scheduled — nothing changed'
+                                          : 'Scheduled sweep saved'));
+    })
+    .catch(function(){
+      [save,off].forEach(function(b){ if(b) b.disabled=false; });
+      if(msg) msg.innerHTML='<b style="color:#c0554a">Could not reach the local server.</b>';
+    });
+}
+
 // ---------- lead-sweep runner (ported from the board) ----------
-function openSweep(){ document.getElementById('sweepbg').classList.add('open'); }
+function openSweep(){
+  document.getElementById('sweepbg').classList.add('open');
+  // Cadence first: the schedule picker defaults to the interval it recommends.
+  refreshCadence().then(refreshSchedule);
+}
 function closeSweep(){ document.getElementById('sweepbg').classList.remove('open'); }
 function openLinkedIn(){ document.getElementById('libg').classList.add('open'); }
 function closeLinkedIn(){ document.getElementById('libg').classList.remove('open'); }
@@ -561,6 +770,7 @@ function pollSweep(){
     if(log && s.log!=null){ log.textContent=s.log; log.scrollTop=log.scrollHeight; }
     if(s.running){ st.textContent='Sweeping the ATS feeds + boards…'; setTimeout(pollSweep,1000); return; }
     btn.disabled=false; btn.textContent='⟳ Run sweep again';
+    refreshCadence();  // the sweep just moved last_swept and added posting dates
     const r=s.result||{};
     if(r.error){ st.innerHTML='<b style="color:#c0554a">Error:</b> '+esc(r.error); return; }
     st.innerHTML='Pulled <b>'+(r.total||0)+'</b> postings · <b>'+(r.inlane||0)+'</b> in-lane → <b>'+(r.keep||0)+'</b> Keep, <b>'+(r.watch||0)+'</b> Watch.';
@@ -760,6 +970,7 @@ function renderPipeline(root){
   const bar=document.createElement('div'); bar.className='ptoolbar';
   bar.innerHTML=
     '<button class="sweepbtn" onclick="openSweep()">⟳ Run lead sweep</button>'+
+    '<span class="swcad" id="sw-chip"></span>'+
     '<input class="fsearch" id="f-q" type="search" placeholder="Filter role or company…" value="'+esc(FILTER.q)+'">'+
     '<button class="fbtn'+(FILTER.warm?' on':'')+'" id="f-warm">🤝 Warm only</button>'+
     '<select class="fsel" id="f-fit"><option value="all">All fits</option><option value="core">Core fit</option><option value="stretch">Stretch</option></select>'+
@@ -769,6 +980,9 @@ function renderPipeline(root){
     // never make it appear. Visibility is toggled by reflagWorkAuth().
     '<button class="fbtn'+(FILTER.waFlagged?' on':'')+'" id="f-wa" style="display:none" title="Postings whose stated work-authorization terms conflict with your work-auth status">⚠ Work-auth flags</button>';
   root.appendChild(bar);
+  // The chip is rebuilt with the toolbar, so repaint from cache and only hit the
+  // server on the first render.
+  CADENCE ? paintCadence() : refreshCadence();
   const hint=document.createElement('div'); hint.className='khint';
   hint.innerHTML='Click a card for full detail · drag between columns to change status.';
   root.appendChild(hint);

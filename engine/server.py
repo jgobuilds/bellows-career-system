@@ -36,7 +36,9 @@ from typing import Any
 from urllib.parse import quote
 
 import _paths  # noqa: F401  (side-effect: adds repo root to sys.path for `import config`)
+import cadence  # posting-rhythm inference -> when the next sweep is worth running
 import config  # file paths (all under personal/) + the shared dashboard shell in engine/
+import sweep_schedule  # registers the sweep with the OS task scheduler
 import work_auth  # posting work-auth verdicts + the user's own status
 from ats_url import ats_url_for  # company -> ATS careers board
 
@@ -268,6 +270,82 @@ def hub_status():
     }
 
 
+CADENCE_FILE = os.path.join(config.DATA_DIR, "posting_cadence.json")
+
+
+def sweep_cadence(today=None):
+    """When the boards were last swept, and when sweeping again is worth it.
+
+    The recommendation is anchored to the LAST SWEEP, not to today. cadence.recommend()
+    answers "how many days should pass between sweeps"; the useful question in the UI is
+    "have that many days passed yet", which only makes sense measured from the last run.
+    """
+    today = today or datetime.date.today()
+    try:
+        data = cadence.load(CADENCE_FILE)
+    except (OSError, ValueError):
+        data = {}
+    companies = data.get("companies") or {}
+    if not companies:
+        return {
+            "swept": False,
+            "reason": "No sweep has run yet, so there is no posting history to read a rhythm from.",
+        }
+
+    stamps = sorted(e["last_swept"] for e in companies.values() if e.get("last_swept"))
+    last = stamps[-1][:10] if stamps else None
+    cadences = [cadence.from_entry(k, e, today) for k, e in companies.items()]
+    rec = cadence.recommend(cadences, today)
+
+    due_on, days_since, overdue_by = None, None, None
+    if last:
+        try:
+            last_date = datetime.date.fromisoformat(last)
+        except ValueError:
+            last_date = None
+        if last_date:
+            days_since = (today - last_date).days
+            due = last_date + datetime.timedelta(days=rec["days"])
+            due_on = due.isoformat()
+            overdue_by = (today - due).days  # negative => not due yet
+
+    # The boards with a readable rhythm, fastest first: these are the ones actually
+    # driving the recommendation, so they are what a curious user should see.
+    # Pair the gap alongside so the sort key is a plain float; median_gap_days is
+    # Optional and the guard below does not narrow into a lambda.
+    active = [
+        (float(c.median_gap_days), c)
+        for c in cadences
+        if c.median_gap_days and c.confidence != "none"
+    ]
+    active.sort(key=lambda pair: pair[0])
+    return {
+        "swept": True,
+        "last_swept": last,
+        "days_since": days_since,
+        "boards": len(companies),
+        "interval_days": rec["days"],
+        "due_on": due_on,
+        "overdue_by": overdue_by,
+        "due": overdue_by is not None and overdue_by >= 0,
+        "basis": rec["basis"],
+        "companies_used": rec["companies_used"],
+        "active": [
+            {
+                "key": c.key,
+                "ats": c.ats,
+                "gap": round(gap, 1),
+                "confidence": c.confidence,
+                "last_post": c.last_post,
+                "weekday": c.weekday_bias,
+                "monthday": c.monthday_bias,
+                "approx": c.quality == "approx",
+            }
+            for gap, c in active[:8]
+        ],
+    }
+
+
 def profile_summary():
     """Small identity + targets card for the Hub banner, read from userconfig."""
     titles = getattr(config, "TARGET_TITLES", None) or []
@@ -492,6 +570,13 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, hub_status())
         if self.path.rstrip("/") == "/api/jobs":
             return self._json(200, jobs_payload())
+        if self.path.rstrip("/") == "/api/sweep-cadence":
+            return self._json(200, sweep_cadence())
+        if self.path.rstrip("/") == "/api/sweep-schedule":
+            try:
+                return self._json(200, sweep_schedule.describe())
+            except Exception as e:  # a scheduler hiccup must not blank the Hub
+                return self._json(200, {"supported": False, "reason": str(e), "installed": False})
         if self.path.rstrip("/") == "/api/sweep-status":
             return self._json(
                 200,
@@ -554,6 +639,18 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(400, {"ok": False, "error": str(e)})
             return self._json(200, {"ok": True, "work_auth": res})
+
+        if path == "/api/sweep-schedule":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+                if body.get("action") == "remove":
+                    state = sweep_schedule.remove()
+                else:
+                    state = sweep_schedule.install(body.get("days"), body.get("at"))
+            except Exception as e:
+                return self._json(400, {"ok": False, "error": str(e)})
+            return self._json(200, {"ok": True, "schedule": state})
 
         if path == "/api/set-voice":
             length = int(self.headers.get("Content-Length") or 0)
