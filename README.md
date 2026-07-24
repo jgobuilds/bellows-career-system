@@ -65,13 +65,18 @@ decision is what makes everything downstream honest.
 
 <p align="center">
   <img src="assets/profile-loop.svg" width="900"
-       alt="The Bellows profile loop. Step 1, onboarding: an interview, not a form, capturing real scope, real metrics, honest ceilings, and what you are not. Step 2, career-profile.md, the source of truth: one file on your machine that every claim in every document traces back to. Step 3, score and tailor a real posting 1 to 10 out loud, inventing nothing to fit the job description. Step 4, documents: ATS-safe resume and cover letter, outreach, and interview prep from the same file. When step 3 hits a blank it cannot fill, an interactive gap-fill chat asks you the question directly, and your answer is written back into the profile.">
+       alt="The Bellows profile loop. Along the spine: step 1, onboarding, an interview rather than a form, capturing real scope, real metrics, honest ceilings, and what you are not. Step 2, career-profile.md, the source of truth: one file on your machine that every claim in every document traces back to. Step 3, score and tailor. Step 4, documents: ATS-safe resume and cover letter, outreach, and interview prep from the same file. Jobs arrive at step 3 by two separate paths that are scored identically: the lead sweep, which polls company ATS feeds on a schedule you set, and a posting you found yourself and pasted in. When step 3 hits a blank the profile cannot fill, an interactive gap-fill chat asks you the question directly, and your answer is written back into the profile.">
 </p>
 
 **Onboarding is an interview, not a form.** The `career-profile` skill asks about scope,
 headcount, budget, real numbers, and the lanes you should *skip* — then writes
 `personal/career-profile.md`. It takes about an hour, and it is the highest-leverage hour
 of the search.
+
+**Jobs reach the scoring step by two separate paths, and neither gets special treatment.**
+The lead sweep polls company ATS feeds directly on a schedule you set, and anything you
+find yourself is pasted straight in. Both land in the same scorer and get the same
+unflattering 1–10.
 
 **That file is then the only thing anything is generated from.** Every bullet, metric,
 title, and skill in a résumé must trace back to it. The tailoring step matches a job
