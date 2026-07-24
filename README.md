@@ -23,6 +23,7 @@ it never auto-applies.**
 
 - [Try the demo](starter/hub-demo.example.html) — one self-contained HTML file, no install
 - [What this is *not*](#what-this-is-not) — quality over volume, and why
+- [The profile is the product](#the-profile-is-the-product) — the onboarding → source-of-truth → gap-fill loop
 - [Your data stays yours](#your-data-stays-yours) — the privacy model
 - [Why Bellows](#why-bellows) — how it differs from the paid tools
 - [Prerequisites](#prerequisites) — what to install first
@@ -56,6 +57,39 @@ The scoring is designed to be *unflattering*. The demo ships with a role scored 
 labeled "don't apply," because a system that only produces 8s and 9s is telling you what you
 want to hear, and you'll stop trusting it. **Ten well-matched applications beat two hundred
 sprayed ones**, and the whole system is built around making those ten actually good.
+
+## The profile is the product
+
+Most résumé tools start at the résumé. Bellows starts one step earlier, and that single
+decision is what makes everything downstream honest.
+
+<p align="center">
+  <img src="assets/profile-loop.svg" width="900"
+       alt="The Bellows profile loop. Step 1, onboarding: an interview, not a form, capturing real scope, real metrics, honest ceilings, and what you are not. Step 2, career-profile.md, the source of truth: one file on your machine that every claim in every document traces back to. Step 3, score and tailor a real posting 1 to 10 out loud, inventing nothing to fit the job description. Step 4, documents: ATS-safe resume and cover letter, outreach, and interview prep from the same file. When step 3 hits a blank it cannot fill, an interactive gap-fill chat asks you the question directly, and your answer is written back into the profile.">
+</p>
+
+**Onboarding is an interview, not a form.** The `career-profile` skill asks about scope,
+headcount, budget, real numbers, and the lanes you should *skip* — then writes
+`personal/career-profile.md`. It takes about an hour, and it is the highest-leverage hour
+of the search.
+
+**That file is then the only thing anything is generated from.** Every bullet, metric,
+title, and skill in a résumé must trace back to it. The tailoring step matches a job
+description's *vocabulary*, never its *claims*: if you didn't do the work, the keyword
+doesn't go on, and the fit score says so out loud.
+
+**When a document needs something the profile doesn't have, it asks you.** That is the
+loop the diagram closes. A posting wants a metric you never recorded, or names a tool
+you've touched but never wrote down — instead of guessing a plausible number, it stops
+and asks in chat, and your answer is written back into the profile. Unknowns are flagged
+in place as `[NEED METRIC]` and collected in the profile's **Metric gaps (open)** section,
+and they're asked **in one batch rather than dripped one at a time**. Anything you don't
+answer stays visibly marked, so a blank can't ship by accident.
+
+The compounding effect is the point: **answer a question once and it is yours for good.**
+The tenth application is faster and sharper than the first, because the profile absorbed
+everything the previous nine surfaced. A tool that regenerates from scratch each time
+learns nothing, and quietly invents the gaps.
 
 ## How it works
 
@@ -104,6 +138,10 @@ auto-applier. Bellows is the whole arc in one place, built on three choices the 
   application, routes senior roles through warm intros — and stops at the submit button.
 - **It coaches the career, not just the application.** Self-assessment, a 3–10-year roadmap, positioning,
   negotiation anchored to *your* comp targets, and a first-90-days plan — not just "get the interview."
+- **One profile, and it compounds.** Everything generates from `career-profile.md`, and when a document
+  needs something the profile lacks, it asks you and writes the answer back — so the tenth application is
+  sharper than the first. See [the profile loop](#the-profile-is-the-product). A generator with no
+  persistent profile behind it has nowhere to put what it learns, so it starts from zero every time.
 
 Runs on the Claude subscription you already have; the equivalent SaaS stack runs $60–200+/month across
 four or five tools. Full market comparison + our enhancement backlog: **[competitive-landscape.md](docs/competitive-landscape.md)**.
@@ -197,7 +235,10 @@ of staring at blank templates.
 | `engine/` | the tools: sweep, triage scorer, résumé/cover builders, `resume_score.py` (standalone 0–100 résumé health check), `ats_url.py` (company → ATS careers board), `server.py` (Hub app server), and the repeatable lead pipeline — `triage_leads.py` (dedupe new leads → worksheet) + `add_jobs_batch.py` (idempotent batch-add). `tools/test_links.py` checks every dashboard link. |
 | `bellows.bat` / `bellows.sh` | launch the Career Hub (starts `server.py`, opens the browser). |
 | `skills/` | the 13 Bellows skill packages: career-profile, voice-profile, self-assessment, positioning, career-coach (roadmap + weekly check-in), apply-pipeline (find + score), resume-tailor, network (reconnect + outreach + references), informational-interview, interview-prep (prep + follow-up), negotiation, linkedin-optimizer, first-90-days. |
-| `engine/hub.html` | the **Career Hub** — the single surface: progress, coaching launchers, coach-voice selector, and the full job pipeline (kanban + detail drawer + lead sweep). |
+| `engine/hub.html` | the **Career Hub** — the single surface: progress, coaching launchers, coach-voice selector, and the full job pipeline (kanban + detail drawer + lead sweep, sweep freshness + recommended cadence, work-authorization flags). |
+| `engine/sweep_schedule.py` | registers the sweep with **Windows Task Scheduler** so it runs when the Hub is closed. User-scope task, no admin; warns if another task already runs a sweep. Non-Windows gets the equivalent cron line. |
+| `engine/cadence.py` | infers each company's posting rhythm from a single board fetch and recommends when the next sweep is worth running. |
+| `engine/work_auth.py` | reads a posting's sponsorship / citizenship terms and flags only what conflicts with *your* status. Never written into a résumé or cover letter. |
 | `engine/dashboard.html` | retired standalone board — the server 301-redirects it to the Hub (kept for reference). |
 | `engine/coach-voice.md` | the 5 coach voices and when each works (delivery only). |
 | `starter/` | blanks (`*.template.*`) to copy into `personal/`, a fully worked fictional example (`*.example.*`), and **`hub-demo.example.html`** — the self-contained interactive demo. |
@@ -228,6 +269,9 @@ of staring at blank templates.
 ```
 sweep → "process the leads"        (apply-pipeline: qualify new leads into the pipeline;
                                     triage_leads.py dedupes → you/agent score → add_jobs_batch.py)
+                                   the Hub shows when you last swept and when the boards'
+                                   own posting rhythm says the next one is worth running —
+                                   and can register it with Windows Task Scheduler for you
 paste a job → "score this"         (apply-pipeline: go/no-go + tailoring plan)
 "build the application"            (engine/build_application.py from resume.json/cover.json)
 "who do I know there?"             (network: the warm path — who, the message, references)
