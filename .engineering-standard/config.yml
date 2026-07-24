@@ -1,0 +1,8 @@
+# Base-skill lenses only — there is deliberately NO `overlay:` here.
+#
+# This repo is PUBLIC. An overlay path pointing at a private sibling
+# (../ai-standards) would not resolve for anyone who clones it, which breaks the
+# rule that a repo must stand alone. Please do not add one: the house lenses are
+# an optional enhancement for the maintainer's machine, never a prerequisite for
+# contributing here.
+lenses: [pragmatic-principles, design-patterns, code-smells]
