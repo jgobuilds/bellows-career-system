@@ -29,12 +29,48 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Mirrors .github/workflows/quality.yml. Keep in step with it: a check that runs
 # there and not here rebuilds the blind spot this script exists to remove.
+TESTS = [sys.executable, "-m", "unittest", "discover", "-s", "tests"]
+
 STEPS = [
-    ("Lint (ruff)", [sys.executable, "-m", "ruff", "check", "."]),
-    ("Format check (ruff)", [sys.executable, "-m", "ruff", "format", "--check", "."]),
-    ("Tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests"]),
-    ("Type check (mypy)", [sys.executable, "-m", "mypy", "engine"]),
+    ("Lint (ruff)", [sys.executable, "-m", "ruff", "check", "."], False),
+    ("Format check (ruff)", [sys.executable, "-m", "ruff", "format", "--check", "."], False),
+    ("Tests", TESTS, False),
+    ("Type check (mypy)", [sys.executable, "-m", "mypy", "engine"], False),
+    # CI runs on ubuntu-latest. This script reproduced CI's CONFIG but not its OS,
+    # which cost a red build: a test that stubbed is_windows() but not the
+    # schtasks lookup returned an empty list on Linux, failing two assertions and
+    # — worse — making three assertNotIn checks pass vacuously.
+    ("Tests (as non-Windows, like CI's runner)", TESTS, True),
 ]
+
+# Binaries that exist on Windows and not on CI's Linux runner. Code that shells
+# out to these must degrade honestly, and tests that stub them must stub the
+# lookup too, or they quietly assert nothing.
+WINDOWS_ONLY_BINARIES = ("schtasks", "powershell", "cmd", "wmic", "tasklist", "reg", "where")
+
+OS_SIM = '''"""Injected by tools/ci_local.py — makes this run look like CI's Linux runner.
+
+Imported automatically via PYTHONPATH before the tests start. It does NOT change
+os.name or the filesystem; it covers the two things that actually differ in
+practice: what platform.system() reports, and which binaries are on PATH.
+"""
+
+import platform
+import shutil
+
+_WINDOWS_ONLY = {%s}
+_real_which = shutil.which
+
+
+def _which(cmd, *args, **kwargs):
+    if str(cmd).lower().removesuffix(".exe") in _WINDOWS_ONLY:
+        return None
+    return _real_which(cmd, *args, **kwargs)
+
+
+shutil.which = _which
+platform.system = lambda: "Linux"
+''' % ", ".join(repr(b) for b in WINDOWS_ONLY_BINARIES)
 
 
 def tracked_files() -> list[str]:
@@ -75,18 +111,39 @@ def build_sandbox(dest: str) -> int:
     )
     with open(os.path.join(dest, "personal", "data", "jobs.json"), "w", encoding="utf-8") as fh:
         fh.write('{"jobs": []}\n')
+
     return len(files)
 
 
+def write_os_shim(dest: str) -> str:
+    """Write the OS shim OUTSIDE the sandbox tree.
+
+    It lived inside at first, and `ruff format --check .` promptly failed on it —
+    the shim is not repo source and must not be linted as if it were. Keeping it
+    in its own directory also means the plain Tests step cannot pick it up.
+    """
+    os.makedirs(dest, exist_ok=True)
+    with open(os.path.join(dest, "sitecustomize.py"), "w", encoding="utf-8") as fh:
+        fh.write(OS_SIM)
+    return dest
+
+
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="bellows-ci-") as sandbox:
+    with (
+        tempfile.TemporaryDirectory(prefix="bellows-ci-") as sandbox,
+        tempfile.TemporaryDirectory(prefix="bellows-ci-ossim-") as shim,
+    ):
         n = build_sandbox(sandbox)
+        write_os_shim(shim)
         print(f"CI sandbox: {n} tracked files, template config scaffolded")
         print(f"  {sandbox}\n")
 
         failures = []
-        for name, cmd in STEPS:
-            res = subprocess.run(cmd, cwd=sandbox, capture_output=True, text=True)
+        for name, cmd, simulate_os in STEPS:
+            env = dict(os.environ)
+            if simulate_os:
+                env["PYTHONPATH"] = shim
+            res = subprocess.run(cmd, cwd=sandbox, capture_output=True, text=True, env=env)
             ok = res.returncode == 0
             print(f"  {'PASS' if ok else 'FAIL'}  {name}")
             if not ok:
