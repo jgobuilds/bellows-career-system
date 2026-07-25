@@ -17,6 +17,10 @@ import re
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(_ROOT, "engine", "hub.html")
 OUT = os.path.join(_ROOT, "starter", "hub-demo.example.html")
+# Published copy for GitHub Pages. Written from the SAME render rather than
+# copied by hand, because two hand-maintained copies of a 67KB generated file
+# drift, and the drift is invisible until someone opens the stale one.
+PAGES_OUT = os.path.join(_ROOT, "docs", "index.html")
 
 # --- Fictional demo data (matches starter/pipeline.example.md — Johnny Fakeuser) ---
 JOBS = [
@@ -263,9 +267,10 @@ def main() -> None:
     html = html.replace("</head>", SHIM + "</head>", 1)
     # 3) title makes it obvious in a tab
     html = html.replace("<title>Bellows</title>", "<title>Bellows — Demo</title>", 1)
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    open(OUT, "w", encoding="utf-8").write(html)
-    print(f"wrote {os.path.relpath(OUT, _ROOT)}  ({len(JOBS)} demo jobs, {len(html)} bytes)")
+    for dest in (OUT, PAGES_OUT):
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        open(dest, "w", encoding="utf-8").write(html)
+        print(f"wrote {os.path.relpath(dest, _ROOT)}  ({len(JOBS)} demo jobs, {len(html)} bytes)")
 
 
 if __name__ == "__main__":

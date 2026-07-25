@@ -9,19 +9,21 @@ tailoring, interview prep, and salary negotiation, all from one profile. Human-i
 it never auto-applies.**
 
 <p align="center">
-  <img src="assets/hub-screenshot.png" width="900"
-       alt="The Bellows Career Hub: a kanban pipeline with To apply / Applied / Interviewing / Offer columns, each job card showing an honest 1-10 fit score, Glassdoor rating, salary band, commute, ATS match %, and warm-contact routing.">
+  <a href="https://jgobuilds.github.io/bellows-career-system/" title="Open the live, interactive demo">
+    <img src="assets/hub-screenshot.png" width="900"
+         alt="The Bellows Career Hub: a kanban pipeline with To apply / Applied / Interviewing / Offer columns, each job card showing an honest 1-10 fit score, Glassdoor rating, salary band, commute, ATS match %, and warm-contact routing. Click to open the live interactive demo.">
+  </a>
 </p>
 
-<p align="center"><em>The Career Hub, running on fictional demo data. Note the score-4 role it tells you to <strong>skip</strong>.</em></p>
-
-> **Try it first —** open **[`starter/hub-demo.example.html`](starter/hub-demo.example.html)** in your
-> browser for a fully interactive demo: kanban, detail drawer, filters, and drag-to-status, all working
-> from fictional example data (Johnny Fakeuser). No install, no server, nothing saved.
+<p align="center">
+  <strong><a href="https://jgobuilds.github.io/bellows-career-system/">▶ Click the screenshot to try it live</a></strong><br>
+  <em>The real UI on fictional data — kanban, detail drawer, filters, drag-to-status. Nothing installed,
+  nothing saved, nothing sent anywhere. Note the score-4 role it tells you to <strong>skip</strong>.</em>
+</p>
 
 ## Contents
 
-- [Try the demo](starter/hub-demo.example.html) — one self-contained HTML file, no install
+- [**Try the live demo**](https://jgobuilds.github.io/bellows-career-system/) — the real UI on fictional data, no install
 - [What this is *not*](#what-this-is-not) — quality over volume, and why
 - [The profile is the product](#the-profile-is-the-product) — the onboarding → source-of-truth → gap-fill loop
 - [How it keeps the AI from making things up](#how-it-keeps-the-ai-from-making-things-up) — the enforced honesty checks
