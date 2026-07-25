@@ -24,6 +24,7 @@ it never auto-applies.**
 - [Try the demo](starter/hub-demo.example.html) — one self-contained HTML file, no install
 - [What this is *not*](#what-this-is-not) — quality over volume, and why
 - [The profile is the product](#the-profile-is-the-product) — the onboarding → source-of-truth → gap-fill loop
+- [How it keeps the AI from making things up](#how-it-keeps-the-ai-from-making-things-up) — the enforced honesty checks
 - [Your data stays yours](#your-data-stays-yours) — the privacy model
 - [Why Bellows](#why-bellows) — how it differs from the paid tools
 - [Prerequisites](#prerequisites) — what to install first
@@ -95,6 +96,51 @@ The compounding effect is the point: **answer a question once and it is yours fo
 The tenth application is faster and sharper than the first, because the profile absorbed
 everything the previous nine surfaced. A tool that regenerates from scratch each time
 learns nothing, and quietly invents the gaps.
+
+## How it keeps the AI from making things up
+
+An LLM writing your résumé will invent a plausible number if you let it, and a plausible
+number on a résumé is a landmine: it survives the screen and detonates in the interview or
+the reference check. So the honesty rules aren't left to the model's good intentions — they
+are enforced by code that runs on every build.
+
+**One source of truth.** Every bullet, metric, title, and tool must trace to
+`career-profile.md`. Nothing is generated from the job description, and matching a posting's
+*vocabulary* is never license to adopt its *claims*.
+
+**Gaps are asked, not filled.** When a document needs something the profile lacks, the system
+stops and asks you in chat. Unknowns are flagged in place as `[NEED METRIC]` and collected in
+the profile's **Metric gaps (open)** section; anything you don't answer stays visibly marked,
+so a blank can't ship by accident.
+
+**Build-time spec validation** (`resume_builder.validate`) — every build prints warnings for:
+
+| Check | Catches |
+|---|---|
+| `employer_tool_warnings()` | a tool credited to the **wrong employer** — the profile's per-employer tool list is the authority, so "Snowflake" on an employer where you ran BigQuery is flagged even though the tool is genuinely yours elsewhere |
+| `scan_placeholders()` | unresolved `[LIKE THIS]` placeholders left in the text |
+| title / location format | punctuation and layout that silently truncate on ATS import |
+
+**The keyword checker refuses to pad.** `ats_match.py` reports coverage against the real job
+description and lists what's missing — then says outright that a term you can't back up does
+not go on the résumé to clear a threshold. A lower score is the correct outcome when the
+alternative is a claim you can't defend.
+
+**Unquantified bullets are surfaced, not invented.** `resume_score.py` flags every bullet
+with no number so *you* can supply a real one or cut it. It never supplies one.
+
+**The profile carries its own guardrails.** Facts that are easy to overstate are annotated at
+the source — figures that must not be summed, per-tool counts that overlap the same people,
+illustrative examples that aren't averages, planned results that haven't landed. The
+annotations travel with the fact, so they're in front of you when you're drafting *and* when
+you're answering questions about it.
+
+**Nothing auto-submits.** The last check is you.
+
+**What this can't do.** These are nets, not walls. They catch misattribution, padding, and
+unsupported numbers; they cannot verify that what's in your profile is true in the first
+place, and they don't read tone or judge whether a framing is fair. The system is built to
+make the honest path the easy one, not to remove you from it.
 
 ## How it works
 

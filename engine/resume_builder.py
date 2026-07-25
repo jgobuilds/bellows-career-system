@@ -40,6 +40,7 @@ risk so you fix the spec, not the generated file.
 """
 
 import json
+import os
 import re
 import sys
 from itertools import pairwise
@@ -50,6 +51,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt
 
+import _paths  # noqa: F401  (side-effect: repo root on sys.path)
+import config
 from docx_common import BODY_FONT, BRAND_BLUE, scan_placeholders
 from docx_common import run as _run
 
@@ -107,6 +110,36 @@ def level_config(spec):
 
 
 # ---- validation against the ATS import rules (resume-style-rules.md §9) ----
+TRACKED_TOOLS = (
+    # Distinctive, employer-identifying tools. A generic word like "sql" or "python"
+    # is everywhere and would only produce noise, so the list stays deliberately short.
+    "snowflake",
+    "bigquery",
+    "redshift",
+    "databricks",
+    "synapse",
+    "azure",
+    "quantexa",
+    "sigma",
+    "metabase",
+    "looker",
+    "power bi",
+    "thoughtspot",
+    "fivetran",
+    "airflow",
+    "astronomer",
+    "talend",
+    "informatica",
+    "elementary",
+    "atlan",
+    "dataiku",
+    "dremio",
+    "stripe",
+    "cursor",
+    "copilot",
+    "rovo",
+)
+
 _TITLE_BAD = re.compile(r"[,/]| - ")  # comma, slash, or spaced hyphen truncates titles
 _LOC_OK = re.compile(r"^.+,\s*[A-Z]{2}\s*\|\s*.+$")  # "City, ST | dates"
 
@@ -156,8 +189,71 @@ def _all_roles(spec):
     return roles
 
 
+def employer_tool_warnings(spec, profile_text=None):
+    """Flag a tool named in one employer's bullets that the profile does not put there.
+
+    WHY THIS EXISTS: on 2026-07-24 an Northwind Media bullet claimed "Google Cloud, dbt Cloud,
+    and Snowflake-class warehousing". Northwind Media is BigQuery/GCP; the profile's Northwind Media
+    tool line has no Snowflake in it. The claim was also gratuitous — Snowflake is
+    genuinely on the record at other employers — so nothing was gained by
+    borrowing it into the wrong employer. Misattributing a tool to a SPECIFIC employer
+    is the kind of error a reference check or one pointed interview question exposes,
+    and it is invisible to every other check we run: the résumé still parses, still
+    scores, and the tool is real *somewhere* on the record.
+
+    The profile is the authority, never a hardcoded list, so this stays correct as the
+    record grows. A tool the profile does not associate with ANY employer is left alone
+    — that is the no-fabrication rule's job, not this one.
+    """
+    if profile_text is None:
+        path = getattr(config, "PROFILE_MD", None)
+        if not path or not os.path.exists(path):
+            return []  # no profile to check against; silence beats a false alarm
+        with open(path, encoding="utf-8") as fh:
+            profile_text = fh.read()
+
+    # Per-employer tool truth: the profile's "Skills/tools:" line under each employer
+    # heading, which is where the record states what was used where.
+    sections: dict[str, list[str]] = {}
+    current = None
+    for line in profile_text.splitlines():
+        head = re.match(r"^#{2,4}\s+([A-Z][^—\-\n]{2,60})", line)
+        if head:
+            current = head.group(1).strip().rstrip(" —-").lower()
+            sections.setdefault(current, [])
+        elif current is not None:
+            sections[current].append(line)
+
+    def tools_for(company):
+        """The profile's tool vocabulary for one employer, if it names one."""
+        key = next((k for k in sections if company.lower().split()[0] in k), None)
+        if key is None:
+            return None
+        body = "\n".join(sections[key]).lower()
+        return body if "skills/tools:" in body else None
+
+    warns = []
+    for entry in spec.get("experience", []) + spec.get("advisory", []):
+        company = entry.get("company") or ""
+        body = tools_for(company)
+        if not body:
+            continue  # employer not found in the profile, or no tool line to check
+        roles = entry.get("roles") or [entry]
+        for role in roles:
+            for bullet in role.get("bullets", []):
+                text = " ".join(bullet).lower()
+                for tool in TRACKED_TOOLS:
+                    if tool in text and tool not in body:
+                        warns.append(
+                            f"{company}: bullet names {tool!r}, which the profile does not "
+                            f"list under that employer — verify before sending"
+                        )
+    return sorted(set(warns))
+
+
 def validate(spec):
     warns = []
+    warns.extend(employer_tool_warnings(spec))
     for role in _all_roles(spec):
         t = role.get("title", "")
         if _TITLE_BAD.search(t):
