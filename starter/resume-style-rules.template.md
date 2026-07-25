@@ -2,6 +2,35 @@
 _Personal preferences applied to every generated resume, cover letter, and outreach message, on top of resume-tailor's `de-ai-checklist.md`. This file is the source of truth — edit it to change the rules._
 _Last updated: 2026-07-16_
 
+
+## 0. Provenance: where every bullet comes from (added 2026-07-24)
+
+**Build each employer block from `career-profile.md`, never from another résumé.**
+Two false claims reached finished documents this way: a warehouse credited to the wrong
+employer, and hiring credited to an employer whose teams the profile describes as standing
+and largely offshore. Neither was invented from nothing — each was **copied forward** from
+the previous application's spec, so one unverified phrase silently became four documents.
+Copying a sibling spec feels like reuse; it is actually laundering an unchecked claim.
+
+The rule:
+
+1. **Open the employer's section in the profile before writing its bullets.** If a claim is
+   not there, it does not go on the page. An adjacent section does not count: the profile is
+   organized by employer because claims are employer-scoped.
+2. **Tailoring is selection and emphasis, not new assertions.** Choose which real bullets to
+   include, order them for the role, and match the posting's *vocabulary*. Synonyms are fine
+   where they describe the same work ("data modeling" for "data models"). A synonym that
+   widens the claim is not a synonym.
+3. **Never carry a phrase across employers.** A tool or a responsibility that is true at one
+   employer is not evidence for another, however true it is of the person overall.
+4. **When a posting wants something the profile lacks, that is a gap, not a wording problem.**
+   Leave it out and say so, or ask and write the answer back into the profile first.
+
+`resume_builder.validate()` enforces the mechanical half — `employer_claim_warnings()` flags
+tools and activity claims a bullet attributes to an employer the profile does not evidence
+them under. It is a net, not a wall: it knows the classes that have burned us, not every
+possible overreach. The discipline above is the actual control.
+
 ## 0. Rule precedence (when two rules collide, higher wins)
 _Adopted 2026-07-16 (pattern borrowed from the "annie" plugin's Section-A precedence block). Every other rule in this file, in the profile framing notes, and in `de-ai-checklist.md` sits under this order:_
 1. **Honesty** — every claim traces to `career-profile.md`; no invented metrics, scope, or tools. Never overridden, by anything.
