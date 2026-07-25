@@ -31,6 +31,7 @@ it never auto-applies.**
 - [First-time setup](#first-time-setup) — clone, scaffold, run
 - [Layout](#layout) — what every file and folder is
 - [Loops](#loops) — the day-to-day workflow
+- [Dependency and supply-chain security](#dependency-and-supply-chain-security) — what is watched, and what is not
 - [competitive-landscape.md](docs/competitive-landscape.md) — full market comparison + enhancement backlog
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, tests, and the automated quality gates
 
@@ -334,6 +335,47 @@ YOU review. YOU press send.
 ```
 
 Nothing auto-submits.
+
+## Dependency and supply-chain security
+
+The runtime surface here is deliberately small — the ATS-direct sweep, the local
+server, and the pipeline tools are **stdlib-only**. Two third-party packages carry
+real weight: `python-docx` (document generation) and `python-jobspy` (the board
+sweep, which is also the only component that talks to the outside world).
+
+| Control | Covers |
+|---|---|
+| **Dependabot**, daily (`.github/dependabot.yml`) | declared `pip` dependencies and the GitHub Actions used by CI |
+| **CI quality gate** (`.github/workflows/quality.yml`) | lint, format, types, and tests on every push and PR |
+| **PII pre-commit gate** | personal data in staged files, before it can enter history |
+| **PII commit-message gate** | personal data in the commit *message*, which no file-level control sees |
+
+**Daily, not weekly, on purpose.** The 2026 pattern is CVEs exploited within about
+36 hours of disclosure, so a weekly cadence can leave a known-exploited flaw
+sitting for six days. Noise stays bounded by `open-pull-requests-limit`.
+
+**Pinning without an update process is worse than floating.** A scanner tells you
+a dependency is vulnerable; Dependabot opens the PR that fixes it. Both halves are
+needed — see [`ai-standards/references/dependency-security.md`](https://github.com/jgobuilds/ai-standards/blob/main/references/dependency-security.md).
+
+### What this does not cover
+
+Stated plainly, because a security section that only lists wins is worse than none:
+
+- **Vulnerability scanning does not run in CI.** Dependabot raises alerts on
+  GitHub's side; nothing in `quality.yml` fails a build on a known CVE. A push with
+  a vulnerable pinned dependency goes green.
+- **Coverage is of *declared* dependencies.** `requirements.txt` is what gets
+  watched. Whatever pip resolves transitively underneath is only covered insofar as
+  Dependabot's graph sees it.
+- **No image scanning, because there are no images.** This repo ships no
+  containers; there is no built artifact whose final layers could carry
+  transitively-installed content. A project that *does* build images needs that
+  scan separately — base-image and declared-dependency coverage does not reach
+  content installed into the final layers.
+- **No runtime egress control.** `python-jobspy` reaches public job boards by
+  design. You are responsible for the volume and frequency of your own requests
+  (see License & legal).
 
 ## License & legal
 
