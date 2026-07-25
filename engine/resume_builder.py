@@ -278,6 +278,24 @@ def employer_claim_warnings(spec, profile_text=None):
 def validate(spec):
     warns = []
     warns.extend(employer_claim_warnings(spec))
+    # The ledger of facts already verified per employer. Imported lazily: it reads
+    # the gitignored profile directory, and validate() must still work in CI where
+    # that does not exist.
+    try:
+        import bullet_library
+
+        for row in bullet_library.unverified(spec):
+            warns.append(
+                f"{row['company']}: bullet asserts {', '.join(row['new_tokens'])}, "
+                f"not yet verified for that employer — check career-profile.md, then "
+                f"`python engine/bullet_library.py --approve <spec>`"
+            )
+    except Exception as exc:
+        # A ledger problem must never block a document build. The ledger is a
+        # convenience layer over the profile, not the source of truth, and it is
+        # absent by design in CI, where personal/ does not exist. Reported, not
+        # raised: silence here would look like "nothing to verify".
+        warns.append(f"bullet ledger unavailable ({type(exc).__name__}) — phrasings unchecked")
     for role in _all_roles(spec):
         t = role.get("title", "")
         if _TITLE_BAD.search(t):
