@@ -77,6 +77,38 @@ Reconstruction is where wrapped bullets break.
 - A page break inside an employer block can also split the entry, which is a
   second reason to prefer the format where the block stays contiguous markup.
 
+### Why the common advice says PDF
+
+The reasons are real, and they are all about the **human** reader:
+
+- **Layout fidelity.** A .docx re-renders on the reader's machine — a different
+  Word version, Google Docs, Pages, or a missing font can reflow a tight two-page
+  layout into three. A PDF looks identical everywhere. This is the strongest
+  reason and it is not disputed here.
+- **It resists silent alteration.** Harder to edit means harder to change without
+  you knowing.
+- **Metadata.** A .docx can carry author name, revision history, tracked changes,
+  and comments. *(Not an issue for documents this system produces —
+  `docx_finalize` rewrites the author and timestamps and strips the tool's
+  fingerprints. That module exists for exactly this.)*
+- **Universality.** Everyone can open a PDF.
+
+And the honest counter-current: agency recruiters often *ask* for Word, because
+they reformat — removing your contact details and adding their letterhead before
+sending you to the employer, so the employer cannot reach you until the placement
+contract is secured. One agency-side survey of 600+ client contacts put Word
+preference around 70%. Knowing that is useful: it is a reason they want Word, not
+a reason it is better for you.
+
+**So the question is not "PDF or .docx" — it is "who reads it next?"**
+
+| Next reader | Send |
+|---|---|
+| An ATS portal (upload, autofill) | **.docx** — a parser reads before any human does |
+| A hiring manager or a warm contact, by email | **PDF** — a human reads first, and fidelity is the whole point |
+| An agency recruiter who asks for Word | **.docx** — and know why they asked |
+| The posting states a format | **whatever it says**, always |
+
 ## 1. Work authorization: implicit, never explicit
 - Do **not** add a "U.S. Citizen" or work-authorization line to the resume header or summary. 18+ years of continuous U.S. employment conveys it implicitly.
 - Add an explicit citizenship/authorization statement **only** when a specific posting makes it a hard knockout (an active-clearance or ITAR-gated role that screens on it) — and confirm with the candidate before adding it, rather than defaulting it on. Cover letters and interviews are the place to raise it if needed, not the resume banner.
