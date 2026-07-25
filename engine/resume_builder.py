@@ -189,7 +189,21 @@ def _all_roles(spec):
     return roles
 
 
-def employer_tool_warnings(spec, profile_text=None):
+# Activity claims that are employer-SPECIFIC and material enough to be checked.
+# Each entry is a synonym group: if a bullet uses any word in the group, the
+# profile's section for that employer must evidence at least one word from it.
+# Kept short and material on purpose — policing ordinary verbs would produce
+# noise, and a gate with false positives gets switched off.
+TRACKED_CLAIMS = {
+    "hiring": ("hire", "hired", "hiring", "recruit", "recruited", "backfill", "staffed up"),
+    "budget ownership": ("budget", "p&l", "spend under management"),
+    "managing managers": ("managing managers", "manage managers", "through team leads"),
+    "on-call / production duty": ("on-call", "on call", "pager"),
+    "patents / publications": ("patent", "published paper", "peer-reviewed"),
+}
+
+
+def employer_claim_warnings(spec, profile_text=None):
     """Flag a tool named in one employer's bullets that the profile does not put there.
 
     WHY THIS EXISTS: on 2026-07-24 an Northwind Media bullet claimed "Google Cloud, dbt Cloud,
@@ -248,12 +262,22 @@ def employer_tool_warnings(spec, profile_text=None):
                             f"{company}: bullet names {tool!r}, which the profile does not "
                             f"list under that employer — verify before sending"
                         )
+                # Same test, applied to activity claims rather than tool names.
+                # A tool check alone missed a bullet claiming hiring at an employer
+                # whose teams the profile describes as standing and largely
+                # offshore: the wrong CLAIM, not the wrong tool.
+                for label, synonyms in TRACKED_CLAIMS.items():
+                    if any(s in text for s in synonyms) and not any(s in body for s in synonyms):
+                        warns.append(
+                            f"{company}: bullet claims {label}, which the profile does not "
+                            f"evidence under that employer — verify before sending"
+                        )
     return sorted(set(warns))
 
 
 def validate(spec):
     warns = []
-    warns.extend(employer_tool_warnings(spec))
+    warns.extend(employer_claim_warnings(spec))
     for role in _all_roles(spec):
         t = role.get("title", "")
         if _TITLE_BAD.search(t):
