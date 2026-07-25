@@ -40,6 +40,31 @@ _Adopted 2026-07-16 (pattern borrowed from the "annie" plugin's Section-A preced
 
 If clearing an ATS keyword target (4) would require a claim you can't defend (1), honesty wins and the score sits lower. If a voice choice (3) would make a title un-parseable (2), parseability wins. Apply the order the same way every time.
 
+
+## 0a. Upload the .docx to an ATS. The PDF is for humans. (added 2026-07-25)
+
+**PDF is a layout format, not a text format.** Extracting text from one turns every
+visual line wrap into a hard newline, so a bullet that reads as one sentence on the
+page arrives in the ATS split across lines mid-clause:
+
+    '...resolving customer and party records into one trusted view '
+    'across the business. '
+
+That is real, observed output from our own PDF, and it is exactly what appeared in
+a Workday role-description field. The same document as .docx is a single unbroken
+paragraph with no break element in it.
+
+Same root cause as the measurement rule already in §3: `ats_match.py` reads .docx
+reliably and .pdf poorly. The PDF is not a worse copy of the text — it is a
+picture of the text, and everything downstream that has to READ it suffers.
+
+- **Any ATS upload or autofill: send the .docx.**
+- **PDF is for a human**: emailing a recruiter, attaching to a message, printing.
+- If a form accepts only PDF, expect broken line breaks and budget time to fix
+  the parsed fields by hand.
+- A page break inside an employer block can also split the entry, which is a
+  second reason to prefer the .docx where the block is contiguous markup.
+
 ## 1. Work authorization: implicit, never explicit
 - Do **not** add a "U.S. Citizen" or work-authorization line to the resume header or summary. 18+ years of continuous U.S. employment conveys it implicitly.
 - Add an explicit citizenship/authorization statement **only** when a specific posting makes it a hard knockout (an active-clearance or ITAR-gated role that screens on it) — and confirm with the candidate before adding it, rather than defaulting it on. Cover letters and interviews are the place to raise it if needed, not the resume banner.
