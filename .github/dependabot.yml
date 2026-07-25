@@ -1,0 +1,24 @@
+# Daily dependency + image update checks.
+#
+# The counterpart to the scanners: a scanner tells you a dependency is
+# vulnerable; Dependabot opens the PR that fixes it. Both halves are needed —
+# see ai-standards/references/dependency-security.md ("pinning without an update
+# process is worse than :latest").
+#
+# DAILY on purpose. The 2026 pattern is CVEs exploited within 36 hours of
+# disclosure, so a weekly cadence can leave a known-exploited flaw sitting for
+# six days. Noise is bounded by open-pull-requests-limit.
+#
+# Chosen over Renovate deliberately: Dependabot is free on private repos and
+# needs no infrastructure, where Renovate charges beyond a limit for private
+# use. Revisit if digest-bump automation becomes the bottleneck — that is
+# Renovate's clear strength.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: "/"
+    schedule: { interval: daily }
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: daily }
