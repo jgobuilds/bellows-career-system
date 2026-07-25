@@ -58,12 +58,24 @@ Same root cause as the measurement rule already in §3: `ats_match.py` reads .do
 reliably and .pdf poorly. The PDF is not a worse copy of the text — it is a
 picture of the text, and everything downstream that has to READ it suffers.
 
-- **Any ATS upload or autofill: send the .docx.**
+**The common advice that "PDF is fine for modern ATS" is not wrong** — it is
+narrower than it sounds. It holds for a clean, text-based, single-column PDF,
+which ours is, and such a file does parse acceptably in every major ATS including
+Workday. The gap is between *acceptable* and *best*: comparative 2026 testing
+across six ATS platforms put .docx at roughly 97% parse accuracy against ~76% for
+text-based PDF and ~53% for designed PDF. The mechanism explains the spread —
+.docx stores content as structured XML a parser reads directly, while a PDF has no
+concept of a line at all, only positioned fragments the parser must reconstruct.
+Reconstruction is where wrapped bullets break.
+
+- **Any ATS upload or autofill: send the .docx.** Same content, better odds, and
+  it removes the reconstruction step entirely.
 - **PDF is for a human**: emailing a recruiter, attaching to a message, printing.
-- If a form accepts only PDF, expect broken line breaks and budget time to fix
-  the parsed fields by hand.
+  Layout fidelity is its real strength, and that strength is wasted on a parser.
+- If a form accepts only PDF, ours is clean enough to go through — budget time to
+  check wrapped bullets and fix the parsed fields by hand.
 - A page break inside an employer block can also split the entry, which is a
-  second reason to prefer the .docx where the block is contiguous markup.
+  second reason to prefer the format where the block stays contiguous markup.
 
 ## 1. Work authorization: implicit, never explicit
 - Do **not** add a "U.S. Citizen" or work-authorization line to the resume header or summary. 18+ years of continuous U.S. employment conveys it implicitly.
