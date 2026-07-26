@@ -7,7 +7,17 @@
 target-version = "py310"
 line-length = 100
 src = ["engine", "."]     # first-party roots, so isort groups our modules correctly
-extend-exclude = ["personal", "starter/hub-demo.example.html", ".engineering-standard"]
+extend-exclude = [
+    "personal",
+    "starter/hub-demo.example.html",
+    ".engineering-standard",
+    # VENDORED, and must stay byte-identical to its upstream copy — the shared
+    # standards installer re-syncs it on every sweep and compares bytes. Letting
+    # ruff-format rewrite it would mean the formatter and the re-sync overwrite
+    # each other forever, and the "has this security control drifted?" check
+    # would report drift on every run until it was ignored.
+    "scripts/pii_scan.py",
+]
 
 [tool.ruff.lint]
 # Enabled: correctness + likely-bug + modernize + import-order + security families.
