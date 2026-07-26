@@ -404,4 +404,4 @@ by this system is legal, financial, or career advice — you review every applic
 
 ---
 
-**Bellows, by [Daybringer Labs](https://github.com/daybringer-labs).** Copyright © 2026 Brightside Data LLC.
+**Bellows, by [Daybringer](https://github.com/daybringer-labs).** Copyright © 2026 Brightside Data LLC.
