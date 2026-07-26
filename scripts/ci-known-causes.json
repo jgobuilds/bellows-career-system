@@ -25,15 +25,30 @@
     {
       "id": "vendored-file-reformatted",
       "match": [
-        "would be reformatted"
+        "Would reformat"
       ],
       "not_match": [
         "--fix"
       ],
-      "cause": "A formatter wants to rewrite a VENDORED file that must stay byte-identical to its upstream copy.",
-      "fix": "Exclude the vendored path from the formatter (e.g. ruff extend-exclude). Reformatting it makes the drift check fight the formatter forever.",
+      "cause": "A linter or formatter is being run over a VENDORED file that must stay byte-identical to its upstream copy. The FORMATTER wants to rewrite it.",
+      "fix": "Add the vendored paths to the tool's exclude list (ruff `extend-exclude`, which covers BOTH `check` and `format`). Without it the tool and the re-sync overwrite each other forever, and the drift check reports drift on every run until someone ignores it.",
       "confidence": "high",
       "first_seen": "2026-07-26"
+    },
+    {
+      "id": "vendored-file-fails-the-linter",
+      "match": [
+        "ruff",
+        "Found "
+      ],
+      "not_match": [
+        "All checks passed"
+      ],
+      "cause": "A linter or formatter is being run over a VENDORED file that must stay byte-identical to its upstream copy. The LINTER rejects it.",
+      "fix": "Add the vendored paths to the tool's exclude list (ruff `extend-exclude`, which covers BOTH `check` and `format`). Without it the tool and the re-sync overwrite each other forever, and the drift check reports drift on every run until someone ignores it.",
+      "confidence": "high",
+      "first_seen": "2026-07-26",
+      "_note": "TWO rows, not one loosened row. The original keyed on \"would be reformatted\" and so caught only `ruff format`; the next repo in the sweep failed on `ruff check` instead. Widening it to match \"ruff\" then fired on a CLEAN format run — `match` is AND-only across the whole log, so it cannot express \"either message\". Same cause with two different messages is two signatures."
     },
     {
       "id": "docker-from-trailing-comment",

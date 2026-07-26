@@ -34,7 +34,14 @@ print("Known causes match deterministically (no model needed):")
 # first version of this list asserted three local rows and went green here.)
 for log, want in [
     ("BROKEN LINKS: 1\n  a.md  ->  ../../../other-repo/x.md", "cross-repo-link-not-in-ci"),
-    ("Would reformat: scripts\\pii_scan.py\n1 file would be reformatted", "vendored-file-reformatted"),
+    # The same cause, two messages, two signatures. The original keyed on
+    # "would be reformatted" and so caught only `ruff format`; the next repo in
+    # the sweep failed on `ruff check` instead. Widening it to match "ruff"
+    # then fired on a CLEAN format run — `match` is AND-only across the whole
+    # log and cannot express "either message".
+    ("ruff format --check src tests\nWould reformat: scripts\\pii_scan.py",
+     "vendored-file-reformatted"),
+    ("Running ruff check src tests\nFound 20 errors.", "vendored-file-fails-the-linter"),
     ("FROM requires either one or three arguments", "docker-from-trailing-comment"),
     ("Unable to resolve action `aquasecurity/trivy-action@0.28.0`", "action-version-does-not-exist"),
 ]:
@@ -65,6 +72,15 @@ check("but the real FAILURE line still matches",
 # the flag exists. Asserting it stops someone "simplifying" it away later.
 check("without same_line, that passing run WOULD have matched",
       cd.match_known(_passing, [{**_sl[0], "same_line": False}]) != [])
+
+print("\nA CLEAN run of the same tool must diagnose nothing:")
+# The failure that produced these two rows also produced a false positive on the
+# way: a signature loosened to "ruff" fired on a successful format check. A
+# known-cause table earns its keep by being right about the negative cases.
+for lbl, log in [("clean ruff check", "Running ruff check src tests\nAll checks passed!"),
+                 ("clean ruff format", "ruff format --check\n67 files already formatted")]:
+    hits = [k["id"] for k in cd.diagnose(log + "\n" + "x" * 2100)["known"]]
+    check(f"{lbl} claims no cause", hits == [], str(hits))
 
 print("\nA near-miss must NOT claim a match:")
 res = cd.diagnose("engine: built-in only (gitleaks not installed)")
