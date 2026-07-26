@@ -127,13 +127,30 @@ jobs:
             echo "failed to get run: could not read any failed job log" > /tmp/ci.log
             echo "::warning::could not read the failure log — check that this job grants actions: read"
           fi
-          python scripts/ci_diagnose.py --log /tmp/ci.log > /tmp/diag.txt 2>&1 || true
-          python scripts/ci_diagnose.py --log /tmp/ci.log --json > /tmp/diag.json 2>/dev/null || echo '{}' > /tmp/diag.json
+          # Has this workflow EVER concluded successfully? It is the single most
+          # load-bearing fact about a red build and the run list does not show
+          # it: a first-run failure and a regression look identical there and
+          # need opposite responses. One workflow in this fleet failed 7 for 7
+          # while everyone looked for what the last commit had broken.
+          # Looked up here rather than in the tool, which has no network by
+          # design. Defaults to "unknown", never to a guess.
+          EVER=unknown
+          # Strip at the @ BEFORE taking the basename. GITHUB_WORKFLOW_REF is
+          # owner/repo/.github/workflows/x.yml@refs/heads/main — basename first
+          # returns "main", which resolves to no workflow at all and silently
+          # yields "unknown" forever. Verified against the real API, not assumed.
+          WF_FILE="${GITHUB_WORKFLOW_REF%%@*}"; WF_FILE="${WF_FILE##*/}"
+          if SUCCESSES=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$WF_FILE/runs?status=success&per_page=1" --jq '.total_count' 2>/dev/null); then
+            [ "$SUCCESSES" -gt 0 ] 2>/dev/null && EVER=yes || EVER=no
+          fi
+          echo "workflow has ever passed: $EVER"
+          python scripts/ci_diagnose.py --log /tmp/ci.log --ever-green "$EVER" > /tmp/diag.txt 2>&1 || true
+          python scripts/ci_diagnose.py --log /tmp/ci.log --ever-green "$EVER" --json > /tmp/diag.json 2>/dev/null || echo '{}' > /tmp/diag.json
           cat /tmp/diag.txt
           # The ALERT gets one line; the full diagnosis goes in the comment,
           # which is a click away and does not compete for attention with every
           # other message in the channel.
-          BLUF=$(python scripts/ci_diagnose.py --log /tmp/ci.log --bluf 2>/dev/null | head -1)
+          BLUF=$(python scripts/ci_diagnose.py --log /tmp/ci.log --ever-green "$EVER" --bluf 2>/dev/null | head -1)
           echo "BLUF=${BLUF:-CI failed; no diagnosis produced.}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
