@@ -401,3 +401,7 @@ property of their respective owners and appear only to describe integrations or 
 
 **No warranty.** Provided as-is, without warranty of any kind, as stated in the license. Nothing produced
 by this system is legal, financial, or career advice — you review every application, and you press send.
+
+---
+
+**Bellows, by [Daybringer Labs](https://github.com/daybringer-labs).** Copyright © 2026 Brightside Data LLC.
