@@ -103,6 +103,30 @@
       "fix": "Fetch per-JOB logs instead: list the run's jobs, select conclusion==failure, and GET repos/{repo}/actions/jobs/{id}/logs. An individual job's log is available as soon as that job finishes.",
       "confidence": "high",
       "first_seen": "2026-07-26"
+    },
+    {
+      "id": "gitignored-but-still-tracked",
+      "match": [
+        ".pyc"
+      ],
+      "not_match": [
+        "All checks passed"
+      ],
+      "cause": "A generated file (bytecode, cache, build output) is TRACKED by git. .gitignore has no effect on files git already tracks, so an ignore rule can be added, look applied, and do nothing.",
+      "fix": "git rm -r --cached <path>, then commit. Adding the .gitignore line is only half; the untrack is the part that acts. Check with `git ls-files | grep <pattern>`.",
+      "confidence": "high",
+      "first_seen": "2026-07-26"
+    },
+    {
+      "id": "render-drift-gate-fires-on-generated-artifact",
+      "match": [
+        "Rendered output differs"
+      ],
+      "cause": "A \"did the committed render drift from its sources?\" gate is diffing a file the build REGENERATES nondeterministically — bytecode, a cache, a timestamped artifact. The gate is right; the file should not be tracked.",
+      "fix": "Read the `git diff --stat` line the gate prints. If the drifting file is generated, untrack it (git rm --cached). Do not weaken the gate.",
+      "confidence": "high",
+      "first_seen": "2026-07-26",
+      "_note": "Cost 7 consecutive red builds, and a wrong diagnosis on top: line endings were blamed first because the story was plausible. The evidence was one line of the CI output, already printed, naming the exact file."
     }
   ]
 }
