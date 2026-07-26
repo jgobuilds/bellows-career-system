@@ -424,7 +424,7 @@ def build_resume(spec, out_path):
     _run(p, spec["contact"], size=10)
 
     # Summary
-    _section(d, "Professional Summary")
+    _section(d, spec.get("summary_heading", "Professional Summary"))
     p = _para(d, before=2)
     _run(p, spec["summary"])
 
@@ -434,7 +434,7 @@ def build_resume(spec, out_path):
         """Core Competencies (tab-aligned columns — NOT a table). Omit the key
         entirely at entry level; a leadership grid reads wrong on a new-grad résumé."""
         if spec.get("competencies"):
-            _section(d, "Core Competencies")
+            _section(d, spec.get("competencies_heading", "Core Competencies"))
             cols = spec.get("competency_columns", cfg["competency_columns"])
             _competencies(d, spec["competencies"], cols)
 
@@ -519,6 +519,26 @@ def build_resume(spec, out_path):
                 _run(_para(d, after=1), entry["location_dates"])
                 for lead, rest in entry.get("bullets", []):
                     _bullet(d, lead, rest)
+        if part == "experience" and spec.get("projects"):
+            # Selected work that is not employment: open source, a public artifact
+            # someone can actually open. Rendered as short prose rather than
+            # bullets, because a project earns attention by what it IS, and a
+            # reader skimming bullets cannot tell a weekend script from a system
+            # with users.
+            #
+            # A URL is printed as plain visible text, never a hyperlink field:
+            # parsers routinely keep the field and drop its display text, and
+            # visible characters survive a .docx, a PDF, and a pasted plain-text
+            # box alike.
+            _section(d, spec.get("projects_heading", "Selected Projects & Open Source"))
+            for proj in spec["projects"]:
+                para = _para(d, before=6, after=0)
+                _run(para, proj["name"], bold=True, size=11)
+                if proj.get("meta"):
+                    _run(para, "   " + proj["meta"], size=9.5)
+                if proj.get("url"):
+                    _run(_para(d, after=1), proj["url"], size=9.5)
+                _run(_para(d, after=2), proj["summary"])
     d.save(out_path)
     return warns
 
