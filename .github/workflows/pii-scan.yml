@@ -1,0 +1,83 @@
+# PII scan in CI — installed by the shared standards installer
+# (install_controls.py --with-ci). Deliberately does NOT name the repo it came
+# from: this file is installed into PUBLIC repos too, and naming a private
+# sibling in a world-readable comment discloses that the sibling exists.
+# Do not hand-edit: the installer rewrites it. Change the template instead.
+#
+# WHY A SEPARATE WORKFLOW rather than a step inside an existing one: repos here
+# have differently-shaped quality pipelines, and editing someone's YAML by
+# machine is how a working pipeline gets silently broken. A dedicated file
+# collides with nothing.
+#
+# WHY THE SCANNER IS VENDORED: CI checks out this repository alone. It cannot
+# reach a private sibling, and making it try would contradict the rule the whole
+# standard rests on — "a repo must stand alone". `scripts/pii_scan.py` is a
+# byte-identical copy, re-synced by `install_controls.py --all` on every sweep,
+# because a copy's real cost is drift and a security control that has quietly
+# fallen behind is worse than one that is plainly absent.
+name: pii-scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # --tree, NOT --staged. Staged-only scans NOTHING in CI, where nothing is
+      # ever staged after a checkout: it loops over an empty list and exits 0 —
+      # green while checking nothing. That exact fake gate was found once in this
+      # fleet already. A gate that cannot fail is not a gate.
+      - name: PII scan (whole tree)
+        run: python scripts/pii_scan.py . --tree --visibility public --max-tier P1
+
+  # CI failures reach a channel — an autonomous break nobody sees is a break that
+  # keeps happening. No-ops when the URL secret is unset. This block is
+  # DELIBERATELY duplicated across the fleet rather than shared: each repo must
+  # stand alone. See the shared ci-notifications reference for the contract.
+  notify:
+    needs: scan
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify on failure
+        env:
+          KIND: ${{ vars.NOTIFY_KIND || 'slack' }}
+          SLACK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TEAMS_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
+          MENTION: ${{ vars.NOTIFY_SLACK_MENTION }}
+        run: |
+          case "$KIND" in
+            slack) URL="$SLACK_URL" ;;
+            teams) URL="$TEAMS_URL" ;;
+            *)     URL="$WEBHOOK_URL" ;;
+          esac
+          if [ -z "$URL" ]; then
+            echo "No webhook URL for NOTIFY_KIND=$KIND — skipping."
+            exit 0
+          fi
+          SHA="${GITHUB_SHA:0:8}"
+          RUN="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          FALLBACK="PII scan failed: $GITHUB_REPOSITORY @ $SHA on $GITHUB_REF_NAME - $RUN"
+          case "$MENTION" in
+            channel) MENTION="<!channel>" ;;
+            here)    MENTION="<!here>" ;;
+            *)       : ;;
+          esac
+          case "$KIND" in
+            slack)
+              BODY=$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg sha "$SHA" --arg branch "$GITHUB_REF_NAME" --arg run "$RUN" --arg fb "$FALLBACK" --arg mention "$MENTION" '($mention | if . == "" then "" else . + " " end) as $m | { text: ($m + $fb), blocks: [ { type:"section", text:{ type:"mrkdwn", text:($m + ":lock: *PII scan failed* — `" + $repo + "`") } }, { type:"section", fields:[ { type:"mrkdwn", text:("*Branch:* " + $branch) }, { type:"mrkdwn", text:("*Commit:* `" + $sha + "`") } ] }, { type:"actions", elements:[ { type:"button", text:{ type:"plain_text", text:"View run" }, url:$run, style:"danger" } ] } ] }') ;;
+            teams)
+              BODY=$(jq -nc --arg t "$FALLBACK" '{"@type":"MessageCard","@context":"http://schema.org/extensions","summary":"PII scan failure","themeColor":"D64545","text":$t}') ;;
+            *)
+              BODY=$(jq -nc --arg t "$FALLBACK" '{text:$t}') ;;
+          esac
+          curl -fsS -X POST -H 'content-type: application/json' -d "$BODY" "$URL" || echo "notify POST failed (non-fatal) — CI status already shows the failure"
