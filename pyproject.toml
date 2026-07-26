@@ -25,6 +25,7 @@ extend-exclude = [
     "scripts/ci_comment.py",
     "tests/ci_diagnose_test.py",
     "tests/ci_comment_test.py",
+    "scripts/staged_scope_check.py",
 ]
 
 [tool.ruff.lint]
