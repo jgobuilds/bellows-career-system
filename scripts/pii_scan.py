@@ -325,8 +325,16 @@ def read(p):
 
 
 def git(root, *args):
-    return subprocess.run(["git", "-C", root, *args],
-                          capture_output=True, text=True, errors="replace")
+    # encoding= is explicit and load-bearing. text=True alone decodes with the
+    # LOCALE default, which is cp1252 on a stock Windows box — so every
+    # non-ASCII byte in a staged blob came back as mojibake ("«" -> "Â«"). That
+    # is not cosmetic in a security gate: a .pii-allow regex or a detector
+    # pattern containing any non-ASCII character silently stops matching, and
+    # the scan reports clean because it never saw the text it was looking for.
+    # Git emits UTF-8; decode it as UTF-8 everywhere. errors="replace" still
+    # covers a genuinely binary blob.
+    return subprocess.run(["git", "-C", root, *args], capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
 
 
 # ------------------------------------------------- gitleaks (secrets backend)
