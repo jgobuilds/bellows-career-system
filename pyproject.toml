@@ -17,6 +17,14 @@ extend-exclude = [
     # each other forever, and the "has this security control drifted?" check
     # would report drift on every run until it was ignored.
     "scripts/pii_scan.py",
+    # Same deal — the CI diagnostician and its corpus, vendored byte-identical
+    # from the same place. The tool's own known-cause table has a row for
+    # exactly this ("vendored-file-reformatted"), which is how this exclusion
+    # got written the moment the pre-push hook refused.
+    "scripts/ci_diagnose.py",
+    "scripts/ci_comment.py",
+    "tests/ci_diagnose_test.py",
+    "tests/ci_comment_test.py",
 ]
 
 [tool.ruff.lint]

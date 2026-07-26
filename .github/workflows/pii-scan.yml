@@ -85,7 +85,67 @@ jobs:
     needs: scan
     if: failure()
     runs-on: ubuntu-latest
+    # Least privilege, and each is needed: actions: read lets the diagnostician
+    # read the failed job's log (a permissions: block REPLACES the default set,
+    # so omitting it silently 403s); contents/issues/pull-requests: write let it
+    # comment on the commit or the PR. Nothing else — the poster has no rerun or
+    # git-write path and the token should not offer it one.
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+      pull-requests: write
     steps:
+      # The notify job runs on a fresh runner, so the diagnostician's own source
+      # and its known-cause table have to be checked out before it can run.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Diagnose BEFORE notifying, so the alert carries a cause rather than just
+      # a red X. Deterministic only: a known cause costs nothing and cannot
+      # hallucinate; an unknown one says so instead of inventing one.
+      #
+      # This step CANNOT fix anything — see the tool's header for why an agent
+      # rewarded for green CI learns to file down the gates.
+      - name: Diagnose the failure (advise only)
+        id: diagnose
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          # Per-JOB logs, not `gh run view --log-failed`. This job is part of the
+          # run it reports on, so the run is still in progress and its archived
+          # log does not exist yet — that call returns something non-empty but
+          # useless, which gets reported as an unrecognised failure.
+          : > /tmp/ci.log
+          IDS=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100"                   --jq '.jobs[] | select(.conclusion=="failure") | .id' 2>/dev/null || true)
+          for id in $IDS; do
+            gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" >> /tmp/ci.log 2>/dev/null || true
+          done
+          if [ ! -s /tmp/ci.log ]; then
+            echo "failed to get run: could not read any failed job log" > /tmp/ci.log
+            echo "::warning::could not read the failure log — check that this job grants actions: read"
+          fi
+          python scripts/ci_diagnose.py --log /tmp/ci.log > /tmp/diag.txt 2>&1 || true
+          python scripts/ci_diagnose.py --log /tmp/ci.log --json > /tmp/diag.json 2>/dev/null || echo '{}' > /tmp/diag.json
+          cat /tmp/diag.txt
+          # The ALERT gets one line; the full diagnosis goes in the comment,
+          # which is a click away and does not compete for attention with every
+          # other message in the channel.
+          BLUF=$(python scripts/ci_diagnose.py --log /tmp/ci.log --bluf 2>/dev/null | head -1)
+          echo "BLUF=${BLUF:-CI failed; no diagnosis produced.}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Put the cause where the failure is already being discussed: a comment on
+      # the PR (or the commit) and the run-page job summary. Zero configuration.
+      - name: Comment the diagnosis on GitHub
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python scripts/ci_comment.py --diagnosis /tmp/diag.json --target github
+
       - name: Notify on failure
         env:
           KIND: ${{ vars.NOTIFY_KIND || 'slack' }}
@@ -93,6 +153,7 @@ jobs:
           TEAMS_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           WEBHOOK_URL: ${{ secrets.NOTIFY_WEBHOOK_URL }}
           MENTION: ${{ vars.NOTIFY_SLACK_MENTION }}
+          BLUF: ${{ steps.diagnose.outputs.BLUF }}
         run: |
           case "$KIND" in
             slack) URL="$SLACK_URL" ;;
@@ -113,10 +174,21 @@ jobs:
           esac
           case "$KIND" in
             slack)
-              BODY=$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg sha "$SHA" --arg branch "$GITHUB_REF_NAME" --arg run "$RUN" --arg fb "$FALLBACK" --arg mention "$MENTION" '($mention | if . == "" then "" else . + " " end) as $m | { text: ($m + $fb), blocks: [ { type:"section", text:{ type:"mrkdwn", text:($m + ":lock: *PII scan failed* — `" + $repo + "`") } }, { type:"section", fields:[ { type:"mrkdwn", text:("*Branch:* " + $branch) }, { type:"mrkdwn", text:("*Commit:* `" + $sha + "`") } ] }, { type:"actions", elements:[ { type:"button", text:{ type:"plain_text", text:"View run" }, url:$run, style:"danger" } ] } ] }') ;;
+              BODY=$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg sha "$SHA" --arg branch "$GITHUB_REF_NAME" --arg run "$RUN" --arg fb "$FALLBACK" --arg mention "$MENTION" --arg diag "$DIAG" '($mention | if . == "" then "" else . + " " end) as $m | { text: ($m + $fb), blocks: [ { type:"section", text:{ type:"mrkdwn", text:($m + ":lock: *PII scan failed* — `" + $repo + "`") } }, { type:"section", fields:[ { type:"mrkdwn", text:("*Branch:* " + $branch) }, { type:"mrkdwn", text:("*Commit:* `" + $sha + "`") } ] }, { type:"section", text:{ type:"mrkdwn", text:(":mag: " + $diag) } }, { type:"actions", elements:[ { type:"button", text:{ type:"plain_text", text:"View run" }, url:$run, style:"danger" } ] } ] }') ;;
             teams)
               BODY=$(jq -nc --arg t "$FALLBACK" '{"@type":"MessageCard","@context":"http://schema.org/extensions","summary":"PII scan failure","themeColor":"D64545","text":$t}') ;;
             *)
               BODY=$(jq -nc --arg t "$FALLBACK" '{text:$t}') ;;
           esac
           curl -fsS -X POST -H 'content-type: application/json' -d "$BODY" "$URL" || echo "notify POST failed (non-fatal) — CI status already shows the failure"
+
+      # The detail, threaded under the alert. Runs AFTER the alert because it
+      # replies to it. Needs a BOT TOKEN: an incoming webhook returns no message
+      # ts, so a webhook alert cannot be threaded at all — with webhook-only
+      # setup this step reports that and skips.
+      - name: Reply with the diagnosis in the Slack thread
+        continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
+        run: python scripts/ci_comment.py --diagnosis /tmp/diag.json --target slack

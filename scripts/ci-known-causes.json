@@ -1,0 +1,93 @@
+{
+  "_comment": "SHARED known CI failure causes, matched deterministically before any model is asked. VENDORED BYTE-IDENTICAL across every repo — canonical copy lives in ai-standards/scripts/. Do NOT add repo-specific rows here; they belong in that repo's .ci-known-causes.json, which is unioned with this file. Every entry was diagnosed and fixed for real: a speculative signature is a confident wrong answer waiting to happen. Adding a row is data, not code.",
+  "_fields": {
+    "id": "stable key, referenced in the ledger and in eval",
+    "match": "ALL of these substrings must appear in the log (case-insensitive)",
+    "not_match": "if ANY of these appear, this is not the cause — guards against a near-miss claiming a match",
+    "cause": "what is actually wrong, in one sentence",
+    "fix": "the confirmed remedy — what a human should DO",
+    "confidence": "high = seen and fixed; medium = seen once, fix inferred",
+    "first_seen": "when it was diagnosed",
+    "same_line": "require all `match` terms on ONE line. Use when the same rule appears in both a PASS and a FAIL line — whole-log matching cannot tell them apart."
+  },
+  "causes": [
+    {
+      "id": "cross-repo-link-not-in-ci",
+      "match": [
+        "BROKEN LINKS",
+        "../../../"
+      ],
+      "cause": "A markdown link points at a SIBLING repo. It resolves on a developer's disk and never in CI, which clones this repo alone.",
+      "fix": "Not a defect. check_links reports these as OUTSIDE THIS REPO; if one still fails, the link escaped the repo without being caught by that rule.",
+      "confidence": "high",
+      "first_seen": "2026-07-26"
+    },
+    {
+      "id": "vendored-file-reformatted",
+      "match": [
+        "would be reformatted"
+      ],
+      "not_match": [
+        "--fix"
+      ],
+      "cause": "A formatter wants to rewrite a VENDORED file that must stay byte-identical to its upstream copy.",
+      "fix": "Exclude the vendored path from the formatter (e.g. ruff extend-exclude). Reformatting it makes the drift check fight the formatter forever.",
+      "confidence": "high",
+      "first_seen": "2026-07-26"
+    },
+    {
+      "id": "docker-from-trailing-comment",
+      "match": [
+        "FROM requires either one or three arguments"
+      ],
+      "cause": "A digest-pinned FROM line has a trailing # comment; Docker parses it as arguments.",
+      "fix": "Move the comment to its own line above the FROM.",
+      "confidence": "high",
+      "first_seen": "2026-07-25"
+    },
+    {
+      "id": "action-version-does-not-exist",
+      "match": [
+        "Unable to resolve action"
+      ],
+      "cause": "A pinned GitHub Action version does not exist.",
+      "fix": "Check the real tags. Prefer a pinned container image over a third-party Action in a security pipeline — fewer moving parts to trust.",
+      "confidence": "high",
+      "first_seen": "2026-07-25"
+    },
+    {
+      "id": "gitleaks-bridge-stale-cli",
+      "match": [
+        "engine: built-in only"
+      ],
+      "not_match": [
+        "gitleaks not installed"
+      ],
+      "cause": "gitleaks is installed but the scan fell back to built-in patterns — the bridge is calling a CLI shape gitleaks no longer has.",
+      "fix": "gitleaks v8.19+ replaced detect/protect with dir/git and made the source positional. Check run_gitleaks() in scripts/pii_scan.py.",
+      "confidence": "high",
+      "first_seen": "2026-07-26"
+    },
+    {
+      "id": "ci-permissions-block-replaces-defaults",
+      "match": [
+        "resource not accessible by integration"
+      ],
+      "cause": "A job's `permissions:` block REPLACES the default scope set rather than adding to it, so listing any scope silently removes every scope not listed.",
+      "fix": "Add the scope the step actually needs back to the block — `actions: read` for `gh run view`. Least privilege is right; just remember the block is a full replacement, not a delta.",
+      "confidence": "high",
+      "first_seen": "2026-07-26",
+      "_note": "Diagnosed by the diagnostician's own first real run (PR #3), which is the promotion loop working as designed."
+    },
+    {
+      "id": "own-run-log-not-archived-yet",
+      "match": [
+        "no lines matched the failure heuristics"
+      ],
+      "cause": "A job tried to read its OWN run's archived log. The run is still in progress while that job executes, so `gh run view --log-failed` returns something non-empty but useless rather than the failure.",
+      "fix": "Fetch per-JOB logs instead: list the run's jobs, select conclusion==failure, and GET repos/{repo}/actions/jobs/{id}/logs. An individual job's log is available as soon as that job finishes.",
+      "confidence": "high",
+      "first_seen": "2026-07-26"
+    }
+  ]
+}
