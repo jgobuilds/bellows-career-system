@@ -339,6 +339,21 @@ def have_gitleaks():
         return False
 
 
+def file_has_ignore_marker(path):
+    """Does this file declare itself a deliberate synthetic-fixture corpus?
+
+    Shared by the built-in scanner and the gitleaks bridge so one marker governs
+    both engines. Reads only the head of the file: the marker is a declaration,
+    not something to be found buried on line 900.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            head = "".join(next(fh, "") for _ in range(8))
+    except OSError:
+        return False
+    return IGNORE_FILE_MARKER in head
+
+
 def run_gitleaks(root, mode):
     """Delegate secret detection to gitleaks, and impose our no-leak rule on it.
 
@@ -351,12 +366,19 @@ def run_gitleaks(root, mode):
          could carry a value (`Secret`, `Match`, `Line`) is never touched, so
          even if redaction silently regressed upstream, nothing leaks through us.
     """
-    sub = {"staged": ["protect", "--staged"], "tree": ["detect", "--no-git"],
-           "history": ["detect"]}[mode]
-    cmd = ["gitleaks", *sub, "--source", root, "--redact",
+    # gitleaks v8.19+ REPLACED `detect`/`protect` with `dir`/`git`, and by v8.30
+    # the old names are gone entirely. The previous mapping here targeted a CLI
+    # that no longer exists: the call failed, the parse failed, and the scanner
+    # quietly fell back to built-in patterns — reporting "engine: built-in only"
+    # forever on machines that HAD gitleaks installed. The source is a positional
+    # argument now, not --source.
+    sub = {"staged": ["git", "--staged"], "tree": ["dir"], "history": ["git"]}[mode]
+    cmd = ["gitleaks", *sub, root, "--redact",
            "--report-format", "json", "--report-path", "-", "--no-banner", "--exit-code", "0"]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    except FileNotFoundError:
+        return None                      # not installed — the documented, quiet path
     except (OSError, subprocess.SubprocessError) as e:
         print(f"warning: gitleaks failed ({e}); falling back to built-in patterns",
               file=sys.stderr)
@@ -364,14 +386,54 @@ def run_gitleaks(root, mode):
     try:
         raw = json.loads(r.stdout or "[]")
     except json.JSONDecodeError:
-        print("warning: gitleaks output unparseable; falling back", file=sys.stderr)
+        # gitleaks IS installed and we still could not read it — almost always a
+        # version mismatch. Say so loudly. "Installed but silently unused" is the
+        # failure this whole lens keeps finding, and it must not be indistinguishable
+        # from "not installed".
+        print("warning: gitleaks is INSTALLED but its output was unparseable — "
+              "expected the v8.19+ CLI (`dir`/`git`). Falling back to built-in "
+              "patterns, which detect far less.", file=sys.stderr)
+        head = (r.stderr or "").strip().splitlines()[:2]
+        for line in head:
+            print(f"  gitleaks said: {line}", file=sys.stderr)
         return None
+    # gitleaks `dir` walks the FILESYSTEM and does not honour .gitignore. Our
+    # architecture deliberately puts real secrets in gitignored paths — .env is
+    # in the ignore block this very tool installs — so unfiltered it reports the
+    # externalize control WORKING as if it were a leak. Restrict it to what git
+    # would actually include, exactly as the built-in scanner does.
+    # tracked_or_untracked() returns ABSOLUTE paths; normalise to repo-relative
+    # so the membership test can actually match. Comparing the two shapes
+    # directly would silently drop EVERY gitleaks finding — a filter that
+    # discards everything looks identical to a clean scan.
+    root_abs = os.path.abspath(root).replace("\\", "/").rstrip("/")
+    _inc = tracked_or_untracked(root)
+    included = None if _inc is None else {
+        os.path.relpath(p, root).replace("\\", "/") for p in _inc}
+
     out = []
     for f in raw or []:
+        rel = (f.get("File") or "").replace("\\", "/")
+        # `dir` mode reports absolute paths; `git` mode reports repo-relative.
+        if rel.startswith(root_abs + "/"):
+            rel = rel[len(root_abs) + 1:]
+        rel = rel.lstrip("./")
+        if included is not None and rel not in included:
+            continue
+        # ONE exemption mechanism, not two. gitleaks findings are appended after
+        # scan_text, so without this the `pii-scan: ignore-file` marker would
+        # govern the built-in engine and be silently ignored by gitleaks — a file
+        # deliberately full of fixture credentials would pass on a machine
+        # without gitleaks and fail on one with it. Same marker, both engines.
+        #
+        # File-level only, deliberately: we never read gitleaks' Line/Match/Secret
+        # fields, so there is nothing to apply a line-level `.pii-allow` regex to.
+        if rel and file_has_ignore_marker(os.path.join(root, rel)):
+            continue
         out.append({
             "type": f"secret:{f.get('RuleID') or 'unknown'}",
             "confidence": "high", "implies_tier": "P3",
-            "file": (f.get("File") or "").replace("\\", "/"),
+            "file": rel,
             "line": f.get("StartLine") or 0,
             "engine": "gitleaks",
         })
