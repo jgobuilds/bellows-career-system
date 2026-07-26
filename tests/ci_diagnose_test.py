@@ -115,6 +115,46 @@ _flood = "\n".join(["error in step %d" % i for i in range(200)]) + "\n##[error]t
 check("a strong line survives 200 weak ones",
       any("the real one" in l for l in cd.failing_lines(_flood)))
 
+print("\nDiagnosis is a root-cause review, not a symptom report:")
+_esc = cd.diagnose("something nobody has seen")["escalation"]
+for section in ("PROXIMATE CAUSE", "ROOT CAUSE", "WHY IT WAS NOT CAUGHT SOONER",
+                "FIX", "PREVENTION"):
+    check(f"the prompt asks for {section}", section in _esc["prompt"])
+check("prevention must be a MECHANISM, not an intention",
+      "not an intention" in _esc["prompt"] and "Be more careful" in _esc["prompt"])
+check("it bounds the why-chain to the evidence",
+      "stop when you leave the evidence" in _esc["prompt"])
+# Every shipped row must carry the mechanism, not just the fix. `fix` addresses
+# this run; `prevent` is what stops the third occurrence, and it is the half
+# that gets skipped once the build is green again.
+_all = cd.load_causes()
+_no_mech = [c["id"] for c in _all if not c.get("prevent")]
+check("every known cause records a prevention mechanism", _no_mech == [], str(_no_mech))
+check("fix and prevent are different text",
+      all(c.get("prevent") != c.get("fix") for c in _all))
+
+print("\n'Has this workflow EVER passed?' changes the answer:")
+# A first-run failure and a regression look identical in a run list and need
+# opposite responses. One repo here failed 7 for 7 while everyone looked for
+# what the last commit had broken; the gate was the thing that was wrong.
+_never = cd.diagnose("something nobody has seen", ever_green=False)
+check("the escalation tells the model to suspect the GATE",
+      "Treat the GATE as the primary suspect" in _never["escalation"]["prompt"])
+check("and to rule that out before blaming the commit",
+      "Do NOT recommend changes to the commit" in _never["escalation"]["prompt"])
+check("the rendered report leads with it",
+      cd.render(_never).splitlines()[0].startswith("!! This workflow has NEVER passed"))
+# It applies even when a cause DID match: a matched signature explains the
+# symptom, not why no commit has ever satisfied the gate.
+_known_never = cd.diagnose("FROM requires either one or three arguments", ever_green=False)
+check("a matched cause does not suppress the never-green warning",
+      "NEVER passed" in _known_never["note"], _known_never["note"])
+check("unknown history stays silent rather than guessing",
+      "NEVER" not in cd.render(cd.diagnose("something nobody has seen")),
+      cd.render(cd.diagnose("something nobody has seen"))[:80])
+check("a workflow that HAS passed gets no warning",
+      "NEVER" not in cd.render(cd.diagnose("something nobody has seen", ever_green=True)))
+
 print("\nAn UNREADABLE log is not an unrecognised failure:")
 # Found on the first real run (PR #3). A restrictive permissions: block dropped
 # actions: read, `gh run view` returned 403, and the tool faithfully diagnosed
@@ -191,8 +231,9 @@ check("no github token in the prompt", "ghp_zzzz" not in esc["prompt"])
 
 print("\nIt asks the model to flag check-weakening fixes:")
 esc = cd.diagnose("something unrecognised")["escalation"]
-check("the prompt demands that WEAKENS A CHECK is called out",
-      "WEAKENS A CHECK" in esc["prompt"])
+check("the prompt demands a check-weakening fix be called out first",
+      "WEAKEN A CHECK" in esc["prompt"] and "first and loudly" in esc["prompt"],
+      esc["prompt"][-400:])
 check("and invites 'I cannot tell' over a guess",
       "cannot tell" in esc["prompt"].lower())
 

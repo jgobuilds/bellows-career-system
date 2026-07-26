@@ -176,30 +176,63 @@ def failing_lines(log, limit=40):
     return (strong[-limit:] + weak[-(limit - min(len(strong), limit)):])[:limit]
 
 
-def build_escalation(log, repo="", workflow=""):
-    """The prompt for the model tier. Redacted, bounded, and it says what it is."""
+def build_escalation(log, repo="", workflow="", ever_green=None):
+    """The prompt for the model tier. Redacted, bounded, and it says what it is.
+
+    Shaped as an RCPS, not a symptom report. Asking only "what's the cause"
+    reliably produces the PROXIMATE cause and stops there — the thing that broke,
+    not the thing that let it break. Both a review of this project's own CI
+    failures and the failure that prompted the review said the same: the fix is
+    usually obvious and the reason it survived seven commits is not.
+    """
     excerpt = "\n".join(failing_lines(redact(log)))
+    never = (
+        "\nIMPORTANT: this workflow has NEVER concluded successfully — not once "
+        "in its recorded history. Treat the GATE as the primary suspect, not the "
+        "commit. A gate that has never passed may be unsatisfiable (asserting "
+        "something no commit can produce), may be diffing a file the build "
+        "regenerates, or may have been enabled before the thing it checks "
+        "existed. Do NOT recommend changes to the commit until you have ruled "
+        "that out.\n" if ever_green is False else "")
     return {
         "task_type": "debug",
         "action": "advise",
         "trigger": "ci-failure",
+        "ever_green": ever_green,
         "prompt": (
             "A CI run failed and no known-cause signature matched, so this is an "
             "unrecognised failure.\n\n"
-            f"Repo: {repo or '(unspecified)'}   Workflow: {workflow or '(unspecified)'}\n\n"
+            f"Repo: {repo or '(unspecified)'}   Workflow: {workflow or '(unspecified)'}\n"
+            f"{never}\n"
             "FAILING LINES (redacted; secrets and addresses are replaced with "
             "«markers» — do not speculate about their contents):\n"
             f"{excerpt or '(no lines matched the failure heuristics)'}\n\n"
-            "Answer three things, briefly:\n"
-            "1. The most likely cause, and what in the log supports it.\n"
-            "2. What a human should DO — the smallest change that addresses the "
-            "cause.\n"
-            "3. Whether the fix WEAKENS A CHECK. If it does, say so first and "
-            "loudly: a green build bought by loosening a gate is usually the "
-            "wrong trade, and that call belongs to a person.\n\n"
+            "Answer as a ROOT-CAUSE REVIEW, not a symptom report. Five things, "
+            "briefly:\n"
+            "1. PROXIMATE CAUSE — what broke, and the exact line above that "
+            "shows it. Quote it. If no line supports your answer, say so instead "
+            "of supplying one that sounds right.\n"
+            "2. ROOT CAUSE — why that was possible. Ask 'why' past the first "
+            "answer, but stop when you leave the evidence: two grounded steps "
+            "beat five speculative ones.\n"
+            "3. WHY IT WAS NOT CAUGHT SOONER — what should have surfaced this "
+            "and did not. A failure nobody was told about is a second, separate "
+            "defect from the failure itself.\n"
+            "4. FIX — the smallest change that addresses the proximate cause.\n"
+            "5. PREVENTION — the MECHANISM that stops recurrence. A mechanism, "
+            "not an intention: a gate, a test, a default, an untracked file. "
+            "'Be more careful' is not an answer; if you have only an intention, "
+            "say that no mechanism is apparent.\n\n"
+            "Then, before finishing: does the fix WEAKEN A CHECK? If so say it "
+            "first and loudly — a green build bought by loosening a gate is "
+            "usually the wrong trade, and that call belongs to a person.\n\n"
             "If the log is insufficient, say what is missing rather than "
             "producing a plausible guess. 'I cannot tell from this' is a useful "
-            "answer; a confident wrong cause costs a debugging session."
+            "answer; a confident wrong cause costs a debugging session. This is "
+            "not hypothetical — the last root-cause review in this project "
+            "blamed line endings, wrote it up and committed it, because the "
+            "story was plausible and the real evidence was one line further "
+            "down the log that nobody had read."
         ),
     }
 
@@ -216,7 +249,16 @@ NO_LOG = re.compile(
     r"HTTP 40[0-9]: .*api\.github\.com|gh: .*not found|must authenticate)")
 
 
-def diagnose(log, repo="", workflow=""):
+def diagnose(log, repo="", workflow="", ever_green=None):
+    """ever_green: has this workflow EVER concluded successfully?
+
+    Passed in rather than looked up — this module has no network, by design. The
+    workflow asks GitHub and hands the answer down. It is the single most
+    load-bearing fact about a red build and the run list does not show it: a
+    first-run failure and a regression look identical there, and they need
+    opposite responses. One means the gate was never satisfiable; the other
+    means something that worked stopped working.
+    """
     if not log.strip() or (len(log) < 2000 and NO_LOG.search(log)):
         return {"tier": "no-log", "known": [],
                 "note": ("the failure log could not be READ, so nothing was "
@@ -235,14 +277,24 @@ def diagnose(log, repo="", workflow=""):
     if hits:
         return {
             "tier": "deterministic",
+            "ever_green": ever_green,
             "known": [{"id": h["id"], "cause": h["cause"], "fix": h["fix"],
+                       # `prevent` is the MECHANISM that stops recurrence, kept
+                       # separate from `fix` (what to do about this run) because
+                       # they are different work and the second is the one that
+                       # gets skipped. Optional: a row with no known mechanism
+                       # says so rather than inventing one.
+                       "prevent": h.get("prevent"),
                        "confidence": h.get("confidence", "unknown")} for h in hits],
-            "note": f"{len(hits)} known cause(s) matched — no model call was made.",
+            "note": f"{len(hits)} known cause(s) matched — no model call was made."
+                    + (" This workflow has NEVER passed, so treat the gate as the "
+                       "suspect even though a cause matched." if ever_green is False else ""),
         }
     return {
         "tier": "escalate",
         "known": [],
-        "escalation": build_escalation(log, repo, workflow),
+        "ever_green": ever_green,
+        "escalation": build_escalation(log, repo, workflow, ever_green),
         "note": ("no known signature matched. Escalate to the model tier via the "
                  "router (action=advise), then to a human. If the diagnosis is "
                  "confirmed, ADD IT to .ci-known-causes.json (or the shared "
@@ -273,12 +325,15 @@ def bluf(res):
 
 def render(res):
     L = []
+    if res.get("ever_green") is False:
+        L.append("!! This workflow has NEVER passed. Suspect the gate, not the commit.")
     if res["tier"] == "deterministic":
         L.append(f"CI diagnosis — {len(res['known'])} KNOWN cause(s), no model needed")
         for k in res["known"]:
             L.append(f"  [{k['confidence']}] {k['id']}")
             L.append(f"    cause: {k['cause']}")
             L.append(f"    fix:   {k['fix']}")
+            L.append(f"    prevent: {k.get('prevent') or '(no mechanism recorded — find one)'}")
     elif res["tier"] == "no-log":
         L.append("CI diagnosis — LOG UNAVAILABLE")
         L.append("  The log could not be read, so NOTHING was diagnosed. This is")
@@ -301,6 +356,10 @@ def main(argv=None):
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
     ap.add_argument("--workflow", default=os.environ.get("GITHUB_WORKFLOW", ""))
     ap.add_argument("--json", action="store_true", dest="as_json")
+    ap.add_argument("--ever-green", dest="ever_green", default="unknown",
+                    choices=["yes", "no", "unknown"],
+                    help="has this workflow ever concluded success? Supplied by "
+                         "the caller; this tool has no network.")
     ap.add_argument("--bluf", action="store_true",
                     help="one line only — for the alert; detail goes in the comment")
     a = ap.parse_args(argv)
@@ -310,7 +369,8 @@ def main(argv=None):
     log = sys.stdin.read() if a.log == "-" else open(
         a.log, encoding="utf-8", errors="replace").read()
 
-    res = diagnose(log, a.repo, a.workflow)
+    res = diagnose(log, a.repo, a.workflow,
+                   {"yes": True, "no": False, "unknown": None}[a.ever_green])
     print(json.dumps(res, indent=2) if a.as_json
           else bluf(res) if a.bluf else render(res))
     # Always 0: this is a REPORT on a failure that already happened. Exiting

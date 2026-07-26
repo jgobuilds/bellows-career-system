@@ -45,6 +45,10 @@ import os, sys, json, argparse, urllib.request, urllib.error, urllib.parse
 # otherwise bury the PR in five identical diagnoses, and the noise would get the
 # whole mechanism turned off.
 MARKER = "<!-- ci-diagnosis:do-not-remove -->"
+# Where ci_diagnose's prompt stops quoting the log and starts asking
+# questions. A named constant rather than a prose match, so rewording the
+# prompt cannot silently empty the excerpt in every comment.
+ANSWER_MARKER = "\n\nAnswer as a ROOT-CAUSE REVIEW"
 SLACK_API = "https://slack.com/api/"
 
 
@@ -53,6 +57,18 @@ SLACK_API = "https://slack.com/api/"
 def body_markdown(res, run_url=""):
     """The comment. BLUF heading, then the supporting detail underneath."""
     L = [MARKER, ""]
+    # The single most load-bearing fact about a red build, and the run list does
+    # not show it. A first-run failure and a regression look identical there and
+    # need opposite responses — one repo here failed 7 for 7 while everyone
+    # looked for what the last commit broke.
+    if res.get("ever_green") is False:
+        L += ["> [!IMPORTANT]",
+              "> **This workflow has never passed — not once in its recorded "
+              "history.** Suspect the GATE before the commit. A gate that has "
+              "never been green may be unsatisfiable, may be diffing a file the "
+              "build regenerates, or may have been enabled before the thing it "
+              "checks existed. Nothing you change in this commit is likely to "
+              "fix it.", ""]
     if res["tier"] == "deterministic":
         n = len(res["known"])
         L.append(f"### 🔎 CI diagnosis — {n} known cause{'s' if n != 1 else ''}")
@@ -62,20 +78,36 @@ def body_markdown(res, run_url=""):
         for k in res["known"]:
             L += ["", f"**{k['id']}**  ·  confidence: {k.get('confidence', 'unknown')}",
                   "", f"- **Cause:** {k['cause']}", f"- **Fix:** {k['fix']}"]
+            # Fix and prevention are different work, and the second is the one
+            # that gets skipped once the build is green again.
+            if k.get("prevent"):
+                L.append(f"- **Prevent:** {k['prevent']}")
+            else:
+                L.append("- **Prevent:** _no mechanism recorded for this cause "
+                         "yet. If you find one, add a `prevent` field to its row "
+                         "— that is what stops the third occurrence._")
     elif res["tier"] == "escalate":
         L += ["### ❓ CI diagnosis — unrecognised failure", "",
               "No known signature matched, so **no cause is being claimed**. "
               "A confident wrong cause costs more than no cause.", "",
-              "Once this is diagnosed and the fix confirmed, add a row to "
-              "`.ci-known-causes.json` — the next occurrence is then free. "
-              "See `docs/runbooks/CI-DIAGNOSIS.md`."]
+              "Once this is diagnosed, record it as a root-cause review, not "
+              "just a fix: what broke, why that was possible, **why nothing "
+              "surfaced it sooner**, and the MECHANISM that prevents recurrence. "
+              "Then add a row to `.ci-known-causes.json` with both `fix` and "
+              "`prevent` — the next occurrence is free, and the one after that "
+              "does not happen. See `docs/runbooks/CI-DIAGNOSIS.md`."]
         excerpt = res.get("escalation", {}).get("prompt", "")
         # The prompt embeds the redacted failing lines; show them rather than
         # making the reader open the log. Redaction happened in ci_diagnose.
         if "FAILING LINES" in excerpt:
             lines = excerpt.split("«markers» — do not speculate about their contents):\n", 1)
             if len(lines) == 2:
-                snippet = lines[1].split("\n\nAnswer three things")[0].strip()
+                # Split on a named marker, not on the prompt's prose. The first
+                # version keyed on "Answer three things" and silently stopped
+                # extracting the moment that prompt was reworded into a
+                # root-cause review — the excerpt would have disappeared from
+                # every comment with nothing failing to say so.
+                snippet = lines[1].split(ANSWER_MARKER)[0].strip()
                 L += ["", "<details><summary>Failing lines (secrets redacted)</summary>",
                       "", "```", snippet[:4000], "```", "", "</details>"]
     elif res["tier"] == "no-log":
