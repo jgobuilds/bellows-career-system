@@ -381,7 +381,8 @@ Stated plainly, because a security section that only lists wins is worse than no
 
 ## License & legal
 
-Bellows is licensed under the **GNU Affero General Public License v3.0** — see [LICENSE](LICENSE).
+Copyright © 2026 Brightside Data LLC. Bellows is licensed under the **GNU Affero General Public
+License v3.0** — see [LICENSE](LICENSE).
 In short: you're free to use, modify, and share it, but if you run a modified version as a network
 service, you have to make your source available under the same license. That's deliberate. This system
 is local-first by design, and the AGPL is what keeps a hosted, closed-source fork from becoming the
