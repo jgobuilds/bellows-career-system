@@ -4,7 +4,7 @@
 # The ATS-direct sweep, the local server, and the pipeline tools are stdlib-only;
 # these cover document generation and the job-board sweep.
 
-python-docx>=1.1          # resume/cover .docx rendering + reading (resume_builder, cover_builder, ats_match)
+python-docx>=1.2.0          # resume/cover .docx rendering + reading (resume_builder, cover_builder, ats_match)
 python-jobspy>=1.1.82        # multi-board sweep (jobspy_sweep); ATS-direct sweep needs no deps
 
 # Optional, Windows only: faster .docx -> PDF via Word. build_application.py falls
