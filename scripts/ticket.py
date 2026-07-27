@@ -144,11 +144,45 @@ class GitHubBackend:
         return (r.returncode == 0), (r.stdout.strip() or r.stderr.strip()[:300])
 
     def assign(self, key, who):
+        """Claim a ticket for an agent, as a LABEL — and verify it landed.
+
+        NOT the GitHub assignee, for two reasons found by testing rather than
+        assuming:
+
+        1. **Assignees must be real accounts.** `repos/:o/:r/assignees` lists
+           only actual collaborators. An agent persona is not one, and per
+           NAMING.md rule 5 a persona is "a human-facing label ... never used as
+           a technical key" — which is literally what this makes it.
+        2. **`gh` exits 0 on a rejected assignee.** It prints "Could not resolve
+           to a user" to stderr and returns 0, so a returncode check reports
+           SUCCESS while assigning nobody. Under ADR 0012 that is not cosmetic:
+           the claim IS the mutual exclusion, so a silently-failed claim means
+           every poll re-serves the same ticket and N agents do one job — the
+           exact duplicate execution the design exists to prevent.
+
+        Hence: label, then READ IT BACK. "I ran the command" is not "the ticket
+        was claimed", and this is the one place that distinction costs
+        correctness rather than tidiness.
+        """
         found = self._find(key)
         if not found:
             return False, f"no ticket with key {key}"
-        r = self._gh("issue", "edit", str(found["number"]), "--add-assignee", who)
-        return (r.returncode == 0), (r.stdout.strip() or r.stderr.strip()[:300])
+        label = f"agent:{who}"
+        num = str(found["number"])
+        # --add-label creates nothing; the label must exist first. Idempotent,
+        # and a failure here is not fatal — the add below is what we verify.
+        self._gh("label", "create", label, "--color", "5319E7",
+                 "--description", "Claimed by an agent (ADR 0012)")
+        self._gh("issue", "edit", num, "--add-label", label)
+        r = self._gh("issue", "view", num, "--json", "labels")
+        try:
+            names = {l.get("name") for l in json.loads(r.stdout or "{}").get("labels", [])}
+        except ValueError:
+            names = set()
+        if label not in names:
+            return False, (f"claim did NOT land — {label} is not on #{num} after "
+                           f"the edit. Refusing to report success.")
+        return True, f"claimed #{num} as {label}"
 
     def list(self, label=None):
         # body and assignees are part of the contract; `gh` omits both unless
@@ -170,6 +204,13 @@ class GitHubBackend:
         for row in rows:
             m = re.search(r"<!-- ticket-key: (.+?) -->", row.get("body") or "")
             row["key"] = m.group(1) if m else None
+            # The CLAIM is an `agent:` label, not the GitHub assignee — see
+            # assign(). `assignees` in the contract means "who holds this",
+            # which for an agent fleet is the label. A human assignee still
+            # shows in GitHub's UI and means what it always meant: accountable.
+            row["assignees"] = [l["name"].split(":", 1)[1]
+                                for l in (row.get("labels") or [])
+                                if l.get("name", "").startswith("agent:")]
         # gh returns newest-first; the contract is oldest-first, because a queue
         # that serves the newest item starves the oldest.
         return sorted(rows, key=lambda r: r.get("number", 0))
@@ -241,16 +282,23 @@ class FileBackend:
         rows = self._all()
         for r in rows:
             if r["key"] == key:
-                r["assignees"] = [who]
+                # Mirrors the GitHub backend: the claim is an agent: label, and
+                # `assignees` is derived from it so the list() contract holds
+                # identically across backends.
+                labs = [l for l in r.get("labels", []) if not l.startswith("agent:")]
+                labs.append(f"agent:{who}")
+                r["labels"] = labs
                 self._save(rows)
-                return True, f"assigned {key} to {who}"
+                return True, f"claimed {key} as agent:{who}"
         return False, f"no ticket with key {key}"
 
     def list(self, label=None):
         # Insertion order IS oldest-first here; the contract is satisfied without
         # sorting, and saying so stops someone "fixing" it with a reverse().
         return [{"number": i, "title": r["title"], "body": r.get("body", ""),
-                 "labels": r.get("labels", []), "assignees": r.get("assignees", []),
+                 "labels": r.get("labels", []),
+                 "assignees": [l.split(":", 1)[1] for l in r.get("labels", [])
+                               if l.startswith("agent:")],
                  "key": r["key"]}
                 for i, r in enumerate(self._all(), 1)
                 if r.get("state") == "open" and (not label or label in r.get("labels", []))]
