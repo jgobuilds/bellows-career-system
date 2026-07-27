@@ -5,7 +5,7 @@ tailoring, interview prep, salary negotiation — all from one profile. Python
 (stdlib HTTP server + CLI tools) plus one single-page HTML view.
 
 **Public repo, AGPL-3.0-or-later.** Copyright © 2026 Brightside Data LLC.
-Bellows, by Daybringer.
+Bellows, by JGOBuilds.
 
 ## Non-negotiables
 
