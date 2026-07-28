@@ -200,6 +200,24 @@ TRACKED_CLAIMS = {
     "managing managers": ("managing managers", "manage managers", "through team leads"),
     "on-call / production duty": ("on-call", "on call", "pager"),
     "patents / publications": ("patent", "published paper", "peer-reviewed"),
+    # Added after an access-governance claim entered a document unflagged: none of
+    # its words were tracked, so the ledger had nothing to verify. A capability that
+    # is true at one employer and not another is exactly what this list is for.
+    "access governance": (
+        "role-based access",
+        "rbac",
+        "least privilege",
+        "access review",
+        "need-to-know",
+        "entitlement",
+    ),
+    "audit / compliance attestation": (
+        "soc 2",
+        "soc2",
+        "iso 27001",
+        "internal audit",
+        "compliance audit",
+    ),
 }
 
 
