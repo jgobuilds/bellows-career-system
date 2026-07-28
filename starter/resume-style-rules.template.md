@@ -109,6 +109,22 @@ a reason it is better for you.
 | An agency recruiter who asks for Word | **.docx** — and know why they asked |
 | The posting states a format | **whatever it says**, always |
 
+## 0b. Tenure claims: attach the career number to the FIELD, not a speciality
+
+A career-length figure belongs to the broad field. Specialities are recent focuses layered
+on top of it, and a résumé that says "X leader with 18+ years" when X has been the focus for
+three is contradicted by the role history printed directly beneath it.
+
+- ✅ "Data and analytics leader with 18+ years, with governance the focus of the last few."
+- ❌ "Data governance leader with 18+ years."
+
+The reader can date every speciality from the titles and dates on the same page, so this is
+one of the few overclaims that is trivially checkable and therefore expensive.
+
+**Related: do not state the current job title in prose.** It already appears in the header
+and in the experience block. "X is my title today" in a summary or cover letter is redundant,
+and it leans on the label where the record is the stronger argument.
+
 ## 1. Work authorization: implicit, never explicit
 - Do **not** add a "U.S. Citizen" or work-authorization line to the resume header or summary. 18+ years of continuous U.S. employment conveys it implicitly.
 - Add an explicit citizenship/authorization statement **only** when a specific posting makes it a hard knockout (an active-clearance or ITAR-gated role that screens on it) — and confirm with the candidate before adding it, rather than defaulting it on. Cover letters and interviews are the place to raise it if needed, not the resume banner.
