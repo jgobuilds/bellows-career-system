@@ -49,6 +49,10 @@ def material_tokens(text: str) -> set[str]:
     phrasing is where legitimate tailoring lives.
     """
     low = text.lower()
+    # Idioms that contain a number but assert no measurable claim. Narrow on
+    # purpose: suppressing broadly would blunt the guard, and the whole design
+    # rests on a new figure being worth one look.
+    low = low.replace("fortune 500", "fortune-ranked").replace("fortune 100", "fortune-ranked")
     toks: set[str] = set()
     # Figures: percentages, money, headcounts, scale. The claims that get checked.
     for m in re.finditer(r"\$?\d[\d,.]*\s?(?:%|k|m|million|billion|\+)?", low):
