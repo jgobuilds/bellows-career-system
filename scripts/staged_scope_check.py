@@ -20,16 +20,31 @@ not a mechanism.** Every other recurring failure here got fixed by becoming a
 gate — PII, public hygiene, doc links, ADR shape, workflow lint. This one never
 did, and it is the only house rule left running on intention alone.
 
+THIS IS A BACKSTOP, NOT THE FIX. Read this before extending it.
+
+The FOREIGN case below only arises when two writers share one working tree —
+which `concurrency-and-branching.md` already forbids ("Never two agents in one
+working tree"), and which this project already solves elsewhere: the fan-out
+lane gives each agent its own `git worktree`. **Isolation removes the failure;
+this file only notices it.** If you are about to extend the FOREIGN logic, the
+real answer is a worktree per agent and you are polishing a symptom.
+
+It stays because the un-isolated case is real today — a human and an agent
+writing in one tree is the common shape — and a cheap backstop under a rule
+broken four times earns its keep. It should shrink over time, not grow.
+
 WHAT IT CHECKS. Two narrow things, both mechanical, neither firing on ordinary
 work:
 
   FOREIGN   a staged file that was ALREADY modified when this agent started
-            and that the agent never edited. That is someone else's in-flight
-            work, and staging it either steals it or — worse — captures half.
+            and that the agent never edited. Someone else's in-flight work —
+            a symptom of missing isolation, per above.
 
-  IGNORED   a staged file that .gitignore matches. It is tracked, so the ignore
-            rule silently does nothing; that exact combination made a render
-            gate unpassable for seven commits.
+  IGNORED   a staged file that .gitignore matches while git tracks it anyway,
+            so the ignore rule silently does nothing. NOT a symptom of anything
+            else, and worth keeping on its own: it made a render gate
+            unpassable for seven commits. Implemented as git's own idiom,
+            `git ls-files -i -c --exclude-standard`.
 
 Deliberately NOT checked: files the agent created via a shell command or a
 generator. They are legitimate and constant here, and flagging them would make
@@ -72,13 +87,16 @@ def staged(root):
 
 
 def ignored(root, paths):
-    """Staged paths that .gitignore matches — tracked, so the rule does nothing."""
-    if not paths:
-        return []
-    r = subprocess.run(["git", "-C", root, "check-ignore", "--no-index", "--stdin"],
-                       input="\n".join(paths), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace")
-    return [p for p in r.stdout.splitlines() if p.strip()]
+    """Staged paths that .gitignore matches while git tracks them anyway.
+
+    `git ls-files -i -c --exclude-standard` is git's own idiom for exactly this
+    question. The first version piped the staged list through `check-ignore
+    --no-index --stdin` — same answer, verified, but reimplementing plumbing git
+    already exposes. Prefer the built-in.
+    """
+    r = git(root, "ls-files", "-i", "-c", "--exclude-standard")
+    tracked_ignored = {p for p in r.stdout.splitlines() if p.strip()}
+    return [p for p in paths if p in tracked_ignored]
 
 
 def main(argv=None):
