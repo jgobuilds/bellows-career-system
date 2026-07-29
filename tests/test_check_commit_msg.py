@@ -6,7 +6,7 @@ false negatives — the check reported "clean" and the leak went through:
   * the trailer filter matched any "word:" prefix, which is this repo's own
     "component: summary" subject convention, so no subject line was ever scanned;
   * employer extraction required a line-ending right after the name, so a heading
-    reading "THE <COMPANY> ..." yielded only the stopword "THE".
+    reading a "THE <COMPANY> ..." heading yielded only the stopword "THE".
 
 A guard that fails open is worse than no guard, since it is trusted.
 

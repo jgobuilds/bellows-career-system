@@ -94,7 +94,7 @@ def employers_from_profile(path=PROFILE):
     with open(path, encoding="utf-8") as fh:
         for line in fh:
             # Just capture the leading ALL-CAPS run. Requiring a specific terminator
-            # kept missing real headings: "THE <COMPANY> ..." yielded only "THE",
+            # kept missing real headings: a "THE <COMPANY> ..." line yielded only "THE",
             # and a parenthetical after the name stopped the match entirely.
             m = re.match(r"^#{2,4}\s+([A-Z][A-Z0-9 &.']{2,60})", line.rstrip())
             if not m:

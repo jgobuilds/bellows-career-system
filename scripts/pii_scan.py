@@ -448,15 +448,57 @@ def run_gitleaks(root, mode):
     return out
 
 
+# The scanner's own config files. `.pii-allow` necessarily quotes the terms it
+# excuses and `.pii-terms` IS the vocabulary, so scanning them reports the
+# control as a violation of itself.
+SELF_CONFIG = {".pii-allow", ".pii-terms"}
+
+
+def scan_terms_in_text(text, path, terms, allow):
+    """`.pii-terms` applied to FILE CONTENT, not just to commit messages.
+
+    WHY THIS EXISTS: the private-vocabulary check was wired only into
+    scan_message(), on the reasoning that gitignore protects the files. It does
+    protect the files — but not prose written INSIDE tracked source. A docstring
+    explaining why a check exists, or a test fixture built from real values, is
+    the same disclosure as a commit message and lands in the same public repo.
+
+    That gap was found the way these always are: by walking into it. Comments and
+    a test fixture in this repo carried real employer names and figures copied out
+    of a gitignored file, and every control passed them. The structured detectors
+    cannot catch a proper noun (the lens says so outright), gitignore does not
+    apply, and the message gate was looking somewhere else.
+
+    Same vocabulary, same file, same tier as the message check — only the surface
+    is new. `.pii-allow` still applies, so a term that is genuinely fine in one
+    place can be excused there without weakening it everywhere.
+    """
+    if not terms or os.path.basename(path) in SELF_CONFIG:
+        return []
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        if any(a.search(line) for a in allow):
+            continue
+        low = line.lower()
+        for term in terms:
+            if re.search(rf"\b{re.escape(term)}\b", low):
+                out.append({"type": "private_term", "confidence": "high",
+                            "implies_tier": "P2", "file": path, "line": i})
+                break  # one finding per line is enough to make the point
+    return out
+
+
 def scan_staged(root, allow, min_conf, detectors=None):
     r = git(root, "diff", "--cached", "--name-only", "--diff-filter=ACM")
     findings = []
+    terms = load_terms(root)
     for rel in [x for x in r.stdout.splitlines() if x.strip()]:
         if os.path.splitext(rel)[1].lower() in SKIP_EXT:
             continue
         blob = git(root, "show", f":{rel}")
         if blob.returncode == 0 and blob.stdout:
             findings += scan_text(blob.stdout, rel, allow, min_conf, detectors)
+            findings += scan_terms_in_text(blob.stdout, rel, terms, allow)
     return findings
 
 
@@ -476,6 +518,7 @@ def scan_tree(root, allow, min_conf, detectors=None):
     findings = []
     listed = tracked_or_untracked(root)
     paths = listed if listed is not None else list(iter_tree(root))
+    terms = load_terms(root)
     for p in paths:
         if os.path.splitext(p)[1].lower() in SKIP_EXT:
             continue
@@ -484,8 +527,9 @@ def scan_tree(root, allow, min_conf, detectors=None):
             continue
         t = read(p)
         if t is not None:
-            findings += scan_text(t, os.path.relpath(p, root).replace("\\", "/"),
-                                  allow, min_conf, detectors)
+            rel = os.path.relpath(p, root).replace("\\", "/")
+            findings += scan_text(t, rel, allow, min_conf, detectors)
+            findings += scan_terms_in_text(t, rel, terms, allow)
     return findings
 
 

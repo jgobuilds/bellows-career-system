@@ -224,11 +224,10 @@ TRACKED_CLAIMS = {
 def employer_claim_warnings(spec, profile_text=None):
     """Flag a tool named in one employer's bullets that the profile does not put there.
 
-    WHY THIS EXISTS: on 2026-07-24 an Northwind Media bullet claimed "Google Cloud, dbt Cloud,
-    and Snowflake-class warehousing". Northwind Media is BigQuery/GCP; the profile's Northwind Media
-    tool line has no Snowflake in it. The claim was also gratuitous — Snowflake is
-    genuinely on the record at other employers — so nothing was gained by
-    borrowing it into the wrong employer. Misattributing a tool to a SPECIFIC employer
+    WHY THIS EXISTS: a bullet once named a warehouse product under an employer whose
+    profile tool line does not list it. The claim was also gratuitous — the product is
+    genuinely on the record at OTHER employers — so nothing was gained by borrowing it
+    into the wrong one. Misattributing a tool to a SPECIFIC employer
     is the kind of error a reference check or one pointed interview question exposes,
     and it is invisible to every other check we run: the résumé still parses, still
     scores, and the tool is real *somewhere* on the record.
@@ -293,9 +292,75 @@ def employer_claim_warnings(spec, profile_text=None):
     return sorted(set(warns))
 
 
+def document_banned_warnings(spec, profile_text=None):
+    """Flag wording the profile marks as true-but-not-for-a-document.
+
+    WHY THIS EXISTS: some facts are real and still wrong to print. The first one
+    was a per-case saving whose SAMPLE SIZE was never recorded. Set beside a department headcount it reads as the return on the
+    whole rollout, which nobody measured. It reached finished documents twice.
+    The prose guidance in the profile said to hedge it ("documented cases of"),
+    and hedging is exactly what failed — a qualifier does not repair a number
+    whose denominator is unknown, it just lengthens the sentence while the reader
+    goes on inferring scale.
+
+    So the profile gets to ban a phrase outright, in a line the machine reads:
+
+        ⛔ DOCUMENT-BANNED: <phrase> | <variant> | <spelled-out variant>
+
+    Everything after the colon is a pipe-separated list of substrings, matched
+    case-insensitively against every rendered string in the spec. The profile
+    stays the authority — banning something new is one line there, not a code
+    change — which is the same principle employer_claim_warnings runs on.
+    """
+    if profile_text is None:
+        path = getattr(config, "PROFILE_MD", None)
+        if not path or not os.path.exists(path):
+            return []  # no profile to check against; silence beats a false alarm
+        with open(path, encoding="utf-8") as fh:
+            profile_text = fh.read()
+
+    banned: list[str] = []
+    for line in profile_text.splitlines():
+        m = re.search(r"DOCUMENT-BANNED:(.+)$", line)
+        if m:
+            banned += [p.strip().lower() for p in m.group(1).split("|") if p.strip()]
+    if not banned:
+        return []
+
+    def strings(obj):
+        if isinstance(obj, str):
+            yield obj
+        elif isinstance(obj, list):
+            for x in obj:
+                yield from strings(x)
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                yield from strings(v)
+
+    warns = []
+    for text in strings(spec):
+        low = text.lower()
+        for phrase in banned:
+            if phrase in low:
+                warns.append(
+                    f"DOCUMENT-BANNED phrase {phrase!r} appears in the spec — the profile "
+                    f"marks this as interview-only; remove it"
+                )
+    return sorted(set(warns))
+
+
 def validate(spec):
     warns = []
     warns.extend(employer_claim_warnings(spec))
+    warns.extend(document_banned_warnings(spec))
+    # The figure allowlist. Imported lazily for the same reason as the ledger
+    # below: it reads the gitignored profile directory, which CI does not have.
+    try:
+        import metric_registry
+
+        warns.extend(metric_registry.warnings(spec))
+    except Exception:  # noqa: S110 — a missing registry must not block a build
+        pass
     # The ledger of facts already verified per employer. Imported lazily: it reads
     # the gitignored profile directory, and validate() must still work in CI where
     # that does not exist.

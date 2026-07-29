@@ -1,0 +1,22 @@
+# .pii-allow — lines the PII scan may skip in THIS repo.
+# One regex per line. Keep each one narrow: an allow entry is a permanent
+# exception, and a broad pattern quietly disables the control it lives under.
+#
+# `.pii-terms` (gitignored, machine-global) lists the private vocabulary. This
+# file records the places where a term is deliberately, publicly correct.
+
+# The copyright holder. AGPL requires the licensor be named, so the entity name
+# is intentionally public here — that is the opposite of a leak.
+Copyright .*Brightside Data LLC
+Brightside Data LLC.*(All rights reserved|AGPL|licen[sc]e)
+^\s*\*?\s*Bellows, by JGOBuilds
+
+# Vendor product names inside the DETECTION lists themselves. The employer guard
+# and the commit-msg gate work by matching tool names, so the names have to be
+# in the source to be caught anywhere else. Narrow to the regex/tuple lines.
+snowflake\|bigquery\|redshift\|databricks\|synapse\|quantexa
+^\s*"quantexa",$
+
+# A public company mapped to its public careers URL. This is data ABOUT a
+# job target, not about the user, and the ATS lookup cannot be tested without it.
+ats_url_for\("The Hartford"

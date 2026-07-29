@@ -32,6 +32,11 @@ from docx_common import BRAND_BLUE, run, scan_placeholders
 
 def build_cover(spec, out_path):
     warns = [f"unresolved placeholder: {m!r}" for m in sorted(scan_placeholders(spec))]
+    # The interview-only ban applies to prose as much as to bullets — the first
+    # phrase it caught had reached the cover letter as well as the résumé.
+    import resume_builder
+
+    warns += resume_builder.document_banned_warnings(spec)
 
     d = docx.Document()
     for s in d.sections:

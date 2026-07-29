@@ -270,7 +270,7 @@ class TestAdvisorySection(unittest.TestCase):
         }
 
     def test_overlapping_advisory_does_not_trip_reverse_chron(self):
-        # the advisory block sits between the current role and the prior one
+        # the advisory block (ends 2026) sits between the current role and the prior one
         # by date, which WOULD be out of order in the main list. In its own section
         # it is not checked against the main timeline.
         warns = [w for w in resume_builder.validate(self._spec()) if "chronological" in w]
