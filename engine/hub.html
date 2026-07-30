@@ -595,11 +595,18 @@ function paintCadence(){
       chip.className='swcad'; chip.title='No sweep has run yet.';
       chip.innerHTML='<span class="dot" style="background:var(--grey)"></span>Never swept';
     }else{
-      const due=c.due;
-      chip.className='swcad'+(due?' due':'');
-      chip.title=c.basis+'  ('+c.companies_used+' of '+c.boards+' boards have a readable rhythm)';
+      // The verdict comes from server.sweep_status so the rule lives in one testable
+      // place. Until the schedule response lands, fall back to the cadence-only
+      // reading rather than rendering nothing.
+      const st=(SCHED && SCHED.status) ? SCHED.status : null;
+      const warn=st?st.warn:c.due;
+      chip.className='swcad'+(warn?' due':'');
+      chip.title=(st&&st.detail?st.detail+'\n\n':'')+
+                 c.basis+'  ('+c.companies_used+' of '+c.boards+' boards have a readable rhythm)';
       let tail;
-      if(due){
+      if(st){
+        tail=st.label;
+      }else if(c.due){
         tail=c.overdue_by===0?'due now':'due '+c.overdue_by+'d ago';
       }else{
         tail='next in '+Math.abs(c.overdue_by)+'d';
@@ -616,12 +623,18 @@ function cadenceBox(c){
     return '<div class="cadbox"><div class="hdr"><b>No sweep has run yet</b></div>'+
            '<div class="why">'+esc(c.reason||'')+' Run one below and the boards’ own posting dates will set the cadence from here on.</div></div>';
   }
-  const verdict = c.due
-    ? (c.overdue_by===0 ? 'Due today' : 'Overdue by '+c.overdue_by+' day'+(c.overdue_by===1?'':'s'))
-    : 'Not due for '+Math.abs(c.overdue_by)+' day'+(Math.abs(c.overdue_by)===1?'':'s');
+  // Same server-side verdict as the chip. When a task is registered and keeping up,
+  // "Due today" is telling the reader to do something the machine already will.
+  const st=(SCHED && SCHED.status) ? SCHED.status : null;
+  const warn=st?st.warn:c.due;
+  const verdict = st ? (st.state==='scheduled' ? 'Scheduled' : st.label)
+    : c.due
+      ? (c.overdue_by===0 ? 'Due today' : 'Overdue by '+c.overdue_by+' day'+(c.overdue_by===1?'':'s'))
+      : 'Not due for '+Math.abs(c.overdue_by)+' day'+(Math.abs(c.overdue_by)===1?'':'s');
   let html='<div class="cadbox">'+
     '<div class="hdr"><b>Last swept '+esc(agoText(c.days_since))+'</b>'+
-    '<span style="color:var(--'+(c.due?'warn':'grey')+')">'+esc(verdict)+'</span></div>'+
+    '<span style="color:var(--'+(warn?'warn':'grey')+')">'+esc(verdict)+'</span></div>'+
+    (st&&st.detail?'<div class="why">'+esc(st.detail)+'</div>':'')+
     '<div class="why">Recommended every <b>'+c.interval_days+' days</b>'+
     (c.due_on?', so next on <b>'+esc(c.due_on)+'</b>':'')+'. '+esc(c.basis)+'. '+
     esc(c.companies_used+' of '+c.boards+' tracked boards post often enough to read a rhythm; '+
@@ -646,7 +659,9 @@ function cadenceBox(c){
 let SCHED=null;
 function refreshSchedule(){
   return fetch('/api/sweep-schedule',{cache:'no-store'}).then(r=>r.json())
-    .then(s=>{ SCHED=s; paintSchedule(); return s; })
+    // paintCadence too: the verdict on the chip depends on the schedule, and this
+    // response lands AFTER the cadence one, so the chip would keep the stale reading.
+    .then(s=>{ SCHED=s; paintSchedule(); paintCadence(); return s; })
     .catch(()=>{});
 }
 function schedOptions(sel){

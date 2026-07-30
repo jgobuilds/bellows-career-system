@@ -273,6 +273,96 @@ def hub_status():
 CADENCE_FILE = os.path.join(config.DATA_DIR, "posting_cadence.json")
 
 
+def sweep_status(cad, sched=None):
+    """One verdict for the Hub: what the boards want, crossed with what the machine
+    will actually do about it.
+
+    WHY THIS IS NOT SIMPLY "scheduled if a task exists". Two ways a schedule can be
+    registered and still not be handling the job:
+
+      - it runs SLOWER than the boards' own rhythm (weekly against a two-day
+        cadence), so postings age out between runs;
+      - it should have fired and did not, and `last_swept` never moved. A task that
+        fails quietly is the case most worth surfacing, and it is exactly the case a
+        bare "scheduled" would paint over.
+
+    Reporting "scheduled" across either of those trades a signal the user can act on
+    for a reassurance they cannot check, which is the more expensive error. So
+    "scheduled" is claimed only when the schedule is both fast enough and demonstrably
+    landing; otherwise the warning survives and says which of the two went wrong.
+
+    Pure, and both inputs are injected, so every branch is testable without a
+    scheduler or a clock.
+    """
+    if not cad or not cad.get("swept"):
+        return {"state": "never", "label": "Never swept", "warn": False}
+
+    sched = sched or {}
+    days = sched.get("days")
+    overdue = cad.get("overdue_by")
+    interval = cad.get("interval_days")
+    since = cad.get("days_since")
+
+    if sched.get("installed") and days:
+        nxt = sched.get("next_run")
+        # One day of grace: it absorbs same-day timing (the run is later today) and a
+        # machine that was asleep at the appointed hour, neither of which is a fault.
+        if since is not None and since > days + 1:
+            return {
+                "state": "stale",
+                "warn": True,
+                "scheduled": True,
+                "days": days,
+                "label": f"scheduled, but nothing has run in {since}d",
+                "detail": (
+                    f"A sweep every {days} days is registered, so one should have run by "
+                    f"now and {since} days have passed without last-swept moving. Check the "
+                    f"task actually ran, and that the machine was awake for it."
+                ),
+            }
+        if interval is not None and days > interval:
+            return {
+                "state": "slow",
+                "warn": True,
+                "scheduled": True,
+                "days": days,
+                "label": f"scheduled every {days}d, slower than the {interval}d recommended",
+                "detail": (
+                    f"The registered task runs every {days} days, but these boards post "
+                    f"often enough to warrant every {interval}. Postings will age out "
+                    f"between runs."
+                ),
+            }
+        return {
+            "state": "scheduled",
+            "warn": False,
+            "scheduled": True,
+            "days": days,
+            "label": "scheduled" + (f" · {nxt}" if nxt else ""),
+            "detail": (
+                f"Registered to run every {days} days"
+                + (f", next on {nxt}" if nxt else "")
+                + ". Nothing to do by hand."
+            ),
+        }
+
+    # Nothing registered: the original behaviour, which is the right one here — a
+    # sweep that only happens when someone remembers IS due when it is due.
+    if cad.get("due"):
+        return {
+            "state": "due",
+            "warn": True,
+            "scheduled": False,
+            "label": "due now" if overdue == 0 else f"due {overdue}d ago",
+        }
+    return {
+        "state": "upcoming",
+        "warn": False,
+        "scheduled": False,
+        "label": f"next in {abs(overdue)}d" if overdue is not None else "not due",
+    }
+
+
 def sweep_cadence(today=None):
     """When the boards were last swept, and when sweeping again is worth it.
 
@@ -574,7 +664,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, sweep_cadence())
         if self.path.rstrip("/") == "/api/sweep-schedule":
             try:
-                return self._json(200, sweep_schedule.describe())
+                state = sweep_schedule.describe()
+                # The verdict ships with the SCHEDULE rather than the cadence because
+                # it needs both, and this is the response that arrives second.
+                state["status"] = sweep_status(sweep_cadence(), state)
+                return self._json(200, state)
             except Exception as e:  # a scheduler hiccup must not blank the Hub
                 return self._json(200, {"supported": False, "reason": str(e), "installed": False})
         if self.path.rstrip("/") == "/api/sweep-status":

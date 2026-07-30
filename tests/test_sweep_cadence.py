@@ -13,6 +13,7 @@ import datetime
 import os
 import sys
 import unittest
+from typing import ClassVar
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engine")
@@ -109,3 +110,71 @@ class SweepCadenceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SweepStatusTest(unittest.TestCase):
+    """The Hub's one-line verdict: what the boards want, crossed with what the
+    machine will actually do. See server.sweep_status for why "a task exists" is
+    not on its own enough to report the job as handled."""
+
+    CAD: ClassVar[dict] = {
+        "swept": True,
+        "interval_days": 2,
+        "days_since": 2,
+        "overdue_by": 0,
+        "due": True,
+    }
+
+    def test_never_swept_short_circuits(self):
+        st = server.sweep_status({"swept": False}, {"installed": True, "days": 2})
+        self.assertEqual(st["state"], "never")
+        self.assertFalse(st["warn"])
+
+    def test_due_and_unscheduled_still_says_due(self):
+        st = server.sweep_status(self.CAD, {"installed": False})
+        self.assertEqual(st["state"], "due")
+        self.assertEqual(st["label"], "due now")
+        self.assertTrue(st["warn"])
+
+    def test_overdue_and_unscheduled_counts_the_days(self):
+        cad = dict(self.CAD, overdue_by=3, days_since=5)
+        self.assertEqual(server.sweep_status(cad, None)["label"], "due 3d ago")
+
+    def test_not_due_and_unscheduled_counts_forward(self):
+        cad = dict(self.CAD, due=False, overdue_by=-2, days_since=0)
+        st = server.sweep_status(cad, {})
+        self.assertEqual(st["state"], "upcoming")
+        self.assertEqual(st["label"], "next in 2d")
+
+    def test_due_but_scheduled_and_keeping_up_reports_scheduled(self):
+        # The point of the change: do not tell someone to do what the machine will.
+        st = server.sweep_status(self.CAD, {"installed": True, "days": 2, "next_run": "Sat 01 Aug"})
+        self.assertEqual(st["state"], "scheduled")
+        self.assertFalse(st["warn"])
+        self.assertIn("Sat 01 Aug", st["label"])
+
+    def test_a_schedule_slower_than_the_recommendation_still_warns(self):
+        st = server.sweep_status(self.CAD, {"installed": True, "days": 7})
+        self.assertEqual(st["state"], "slow")
+        self.assertTrue(st["warn"])
+        self.assertIn("slower", st["label"])
+
+    def test_a_schedule_that_is_not_landing_warns_rather_than_reassures(self):
+        # The expensive failure: a registered task that quietly never runs would be
+        # reported as handled by any "installed => scheduled" rule.
+        cad = dict(self.CAD, days_since=9, overdue_by=7)
+        st = server.sweep_status(cad, {"installed": True, "days": 2})
+        self.assertEqual(st["state"], "stale")
+        self.assertTrue(st["warn"])
+        self.assertIn("9d", st["label"])
+
+    def test_one_day_of_grace_before_calling_a_schedule_stale(self):
+        # Same-day timing and a sleeping machine are not faults.
+        cad = dict(self.CAD, days_since=3, overdue_by=1)
+        self.assertEqual(
+            server.sweep_status(cad, {"installed": True, "days": 2})["state"], "scheduled"
+        )
+
+    def test_installed_without_an_interval_falls_back_to_the_due_reading(self):
+        st = server.sweep_status(self.CAD, {"installed": True, "days": None})
+        self.assertEqual(st["state"], "due")
