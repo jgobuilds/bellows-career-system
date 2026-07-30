@@ -92,6 +92,10 @@ WORK_AUTH = None
 # =============================================================================
 # 4. YOUR LANE  (words that mean "this is my kind of role")
 # =============================================================================
+# Widen these freely. A BARE word ("governance", "enablement") is safe to add: the
+# scorer only gives a lane term full weight when the title also proves it means data
+# work, either in the term itself or elsewhere in the title. Without that rule a
+# physician's "Medical Director, DI Underwriting Governance" took the top lane score.
 LANE_STRONG = ["data governance", "data platform", "data strategy", "data enablement"]
 LANE_MED = ["analytics", "business intelligence", "bi", "data", "insights", "reporting"]
 LANE_ADJ = ["reliability", "platform", "architecture"]

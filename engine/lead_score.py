@@ -125,6 +125,94 @@ HARD_GATE = CFG.terms_to_regex(CFG.HARD_GATES)
 NOISE = CFG.terms_to_regex(CFG.NOISE)
 OFF_CONTEXT = CFG.terms_to_regex(CFG.OFF_CONTEXT)
 PENALTY_LANES = {label: CFG.terms_to_regex(terms) for label, terms in CFG.PENALTY_LANES.items()}
+
+# ---------------------------------------------------------------------------
+# The anchor rule, and the lane ceiling. Both exist because of one measured
+# failure: across two sweeps, 9 of 17 postings this scorer put at 7+ scored
+# below 6 on a proper read. Every one failed the same way.
+#
+# A lane list widens over time — that is the correct instinct, it buys recall —
+# and widening produces BARE words. "governance" and "enablement" on their own
+# are the two worst, because they are common outside data entirely: a physician's
+# "Medical Director, DI Underwriting Governance" and a sales job's "Revenue
+# Enablement Director" both took the full lane-4 score. Neither is a data role.
+#
+# So a lane term only counts at full strength when something in the title makes
+# it mean what we think it means. Self-anchored terms ("data governance", "MDM")
+# carry their own proof; bare ones need a data word elsewhere in the title.
+# Derived from the term itself rather than a second config list, so a term added
+# tomorrow gets the right treatment without anyone maintaining a parallel list.
+_ANCHOR_WORDS = (
+    "data",
+    "analytic",
+    "analytics",
+    "information",
+    "bi",
+    "business intelligence",
+    "warehouse",
+    "lakehouse",
+    "lake",
+    "metadata",
+    "lineage",
+    "catalog",
+    "mdm",
+    "insight",
+    "insights",
+    "reporting",
+    "etl",
+    "elt",
+    "pipeline",
+    "semantic",
+    "dbt",
+    "sql",
+    "ml",
+    "machine learning",
+    "quality",
+    "stewardship",
+)
+ANCHOR = CFG.terms_to_regex(list(_ANCHOR_WORDS))
+
+
+def lane_is_anchored(title, matched_term):
+    """Does this lane match actually point at data work?
+
+    True when the matched term proves it itself, or when the title says data
+    somewhere else. False for a bare lane word floating in a non-data title.
+    """
+    return bool(ANCHOR.search(matched_term or "") or ANCHOR.search(title or ""))
+
+
+# What the rest of the rubric may add up to, given how well the LANE fits. Level,
+# geography and domain are worth 6 points between them, which was enough to carry
+# an off-lane role to Keep on "remote" plus "insurance" alone. The job has to be
+# the right job first; everything else is a modifier on that, not a substitute.
+LANE_CAP = {4: 10, 3: 8, 2: 5, 1: 3, 0: 0}
+
+# Below his target level is close to disqualifying on its own, so it caps too:
+# a Manager or Lead posting cannot reach Keep however well it reads otherwise.
+BELOW_LEVEL_CAP = 5
+
+# A title with NO level word at all: usually IC or ambiguous, occasionally a
+# senior role that just did not say so. Kept out of Keep rather than dropped.
+NO_LEVEL_CAP = 6
+
+
+def cap_total(raw, lane, lvl):
+    """Bound the rubric total by how well the LANE and LEVEL actually fit.
+
+    Level, geography and domain are worth 6 points between them, which was enough
+    to carry an off-lane posting to Keep on "remote" plus "insurance" alone. The
+    job has to be the right job first; the rest are modifiers on that, never
+    substitutes for it. Pure, so every combination is testable.
+    """
+    cap = LANE_CAP.get(lane, 10)
+    if lvl == 1:  # below target level
+        cap = min(cap, BELOW_LEVEL_CAP)
+    elif lvl == 0:  # no level word at all
+        cap = min(cap, NO_LEVEL_CAP)
+    return min(raw, cap)
+
+
 # Penalty lanes survive the OFF_CONTEXT drop (e.g. "sales enablement" contains
 # "sales" — you're open to that pivot, so it must not be auto-dropped).
 OFF_CONTEXT_EXEMPT = list(PENALTY_LANES.values())
@@ -149,7 +237,15 @@ def score_row(title, location):
         return 0, "Drop", "your keyword appearing in a non-data function"
 
     # Lane (0-4)
-    if LANE_STRONG.search(t):
+    strong = LANE_STRONG.search(t)
+    if strong and not lane_is_anchored(t, strong.group(0)):
+        # A bare lane word in a title with nothing data-ish anywhere in it. This is
+        # the single largest source of false Keeps, so it drops to the floor rather
+        # than taking a modest penalty — a physician's title should not outrank a
+        # real data role because both contain "governance".
+        lane = 1
+        reasons.append(f"'{strong.group(0)}' with no data anchor in the title (-3)")
+    elif strong:
         lane = 4
         reasons.append("strong lane (governance/enablement/platform)")
     elif LANE_MED.search(t):
@@ -208,7 +304,10 @@ def score_row(title, location):
     if dom:
         reasons.append("insurance/fintech domain")
 
-    score = lane + lvl + geo + dom  # 0-10
+    raw = lane + lvl + geo + dom  # 0-10 before the ceilings
+    score = cap_total(raw, lane, lvl)
+    if score < raw:
+        reasons.append(f"capped {raw}->{score} (lane fit and level bound the total)")
     bucket = "Keep" if score >= 7 else ("Watch" if score >= 4 else "Drop")
     # You need remote or CT-commutable. A clearly off-geo role can't be a Keep.
     if geo == 0 and bucket == "Keep":

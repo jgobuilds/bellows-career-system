@@ -215,3 +215,77 @@ class TestWorkAuthCarryThrough(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLaneAnchorRule(unittest.TestCase):
+    """A lane keyword only counts when the title shows it means DATA work.
+
+    WHY: across two sweeps, 9 of 17 postings this scorer put at 7+ scored below 6
+    on a proper read, and they all failed the same way. A lane list widens over
+    time — correctly, it buys recall — and widening produces BARE words.
+    "governance" and "enablement" alone are the worst offenders because they are
+    common outside data entirely, so a physician's "Medical Director, DI
+    Underwriting Governance" and a sales job's "Revenue Enablement Director" both
+    took the full lane score.
+
+    These assert the MECHANISM rather than end-to-end totals, because the totals
+    depend on which config is loaded and this repo ships two.
+    """
+
+    def test_a_bare_lane_word_in_a_non_data_title_is_not_anchored(self):
+        self.assertFalse(
+            lead_score.lane_is_anchored(
+                "Medical Director, DI Underwriting Governance", "governance"
+            )
+        )
+        self.assertFalse(lead_score.lane_is_anchored("Revenue Enablement Director", "enablement"))
+
+    def test_a_self_anchored_term_carries_its_own_proof(self):
+        self.assertTrue(lead_score.lane_is_anchored("Director, Data Governance", "data governance"))
+        self.assertTrue(lead_score.lane_is_anchored("Head of MDM", "mdm"))
+
+    def test_a_bare_term_is_anchored_by_a_data_word_elsewhere_in_the_title(self):
+        # The bare word is fine when the title proves the subject some other way.
+        self.assertTrue(
+            lead_score.lane_is_anchored(
+                "Quantitative Analytics Manager, Model Governance", "governance"
+            )
+        )
+
+    def test_the_two_worst_real_titles_never_reach_keep_under_any_config(self):
+        # Holds under both shipped configs: the template has no bare lane words to
+        # match at all, and this rule demotes them where a config does.
+        for title in (
+            "Medical Director, DI Underwriting Governance",
+            "Revenue Enablement Director",
+        ):
+            score, bucket, _ = lead_score.score_row(title, "Remote")
+            self.assertNotEqual(bucket, "Keep", f"{title!r} scored {score} / {bucket}")
+
+
+class TestScoreCeilings(unittest.TestCase):
+    """Lane fit and level bound the total, so geography and domain cannot carry an
+    off-lane role to Keep on "remote" plus "insurance" alone. Pure arithmetic,
+    tested directly — it is the same under every config."""
+
+    def test_a_weak_lane_caps_the_total(self):
+        # raw 8 with a lane of 2 is exactly the failure shape: right words, wrong job.
+        self.assertEqual(lead_score.cap_total(8, lane=2, lvl=3), 5)
+        self.assertEqual(lead_score.cap_total(8, lane=1, lvl=3), 3)
+
+    def test_a_strong_lane_is_not_capped(self):
+        self.assertEqual(lead_score.cap_total(9, lane=4, lvl=3), 9)
+
+    def test_below_target_level_caps_below_keep(self):
+        self.assertEqual(lead_score.cap_total(9, lane=4, lvl=1), lead_score.BELOW_LEVEL_CAP)
+        self.assertLess(lead_score.BELOW_LEVEL_CAP, 7, "a below-level role must not reach Keep")
+
+    def test_a_title_with_no_level_word_is_kept_out_of_keep(self):
+        self.assertEqual(lead_score.cap_total(9, lane=4, lvl=0), lead_score.NO_LEVEL_CAP)
+        self.assertLess(lead_score.NO_LEVEL_CAP, 7)
+
+    def test_ceilings_never_raise_a_score(self):
+        for lane in range(5):
+            for lvl in (0, 1, 3):
+                for raw in range(11):
+                    self.assertLessEqual(lead_score.cap_total(raw, lane, lvl), raw)
