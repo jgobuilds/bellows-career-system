@@ -700,8 +700,23 @@ class Handler(SimpleHTTPRequestHandler):
             except Exception as e:
                 return self._json(400, {"ok": False, "error": str(e)})
             if not res["pipeline"]:
+                # jobs.json has ALREADY been written by set_status at this point, so
+                # reporting a bare failure leaves the two halves of the datastore
+                # disagreeing and tells the user nothing happened. Say what actually
+                # happened, and say how to repair it.
                 return self._json(
-                    404, {"ok": False, "error": f"job id {body.get('id')} not found in pipeline.md"}
+                    404,
+                    {
+                        "ok": False,
+                        "error": (
+                            f"job {body.get('id')} has no row in pipeline.md, so only jobs.json "
+                            f"was updated. The two halves now disagree. This happens when a job "
+                            f"was appended to jobs.json directly instead of through "
+                            f"pipeline_store. Repair with: python engine/repair_pipeline.py"
+                        ),
+                        "partial_write": True,
+                        **res,
+                    },
                 )
             return self._json(200, {"ok": True, **res})
 

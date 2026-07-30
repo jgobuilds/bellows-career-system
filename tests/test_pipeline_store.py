@@ -7,6 +7,7 @@ lines, plus jobs_list / find_job / normalize_doc — no disk I/O. Stdlib unittes
 import os
 import sys
 import unittest
+from typing import ClassVar
 
 sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "engine")
@@ -120,3 +121,39 @@ class TestNormalizeChecks(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OrphanDetectionTest(unittest.TestCase):
+    """jobs.json and pipeline.md are two halves of one datastore.
+
+    The bug: appending straight to the jobs list skips this module and produces a job
+    the board renders but cannot update — set-status looks for the pipeline.md row,
+    does not find it, and 404s. Worse, jobs.json is written BEFORE that check, so the
+    halves drift further apart on every retry while the user is told nothing happened.
+    """
+
+    ROWS: ClassVar[list[str]] = [
+        "| ID | Role | Company | Score |\n",
+        "|----|------|---------|-------|\n",
+        "| 1 | Director | Acme | 8 |\n",
+        "| 2 | Head of Data | Beta | 7 |\n",
+    ]
+
+    def test_agreeing_halves_report_no_drift(self):
+        data = [{"id": 1}, {"id": 2}]
+        self.assertEqual(store.orphans(data, self.ROWS), {"missing_rows": [], "orphan_rows": []})
+
+    def test_a_job_with_no_row_is_the_undraggable_card(self):
+        data = [{"id": 1}, {"id": 2}, {"id": 3}]
+        self.assertEqual(store.orphans(data, self.ROWS)["missing_rows"], [3])
+
+    def test_a_row_with_no_record_is_reported_but_not_repairable(self):
+        data = [{"id": 1}]
+        drift = store.orphans(data, self.ROWS)
+        self.assertEqual(drift["orphan_rows"], [2])
+        self.assertEqual(drift["missing_rows"], [])
+
+    def test_non_numeric_and_header_lines_are_not_mistaken_for_rows(self):
+        data = [{"id": 1}, {"id": 2}]
+        noisy = [*self.ROWS, "| — | not a row |\n", "some prose\n", "\n"]
+        self.assertEqual(store.orphans(data, noisy), {"missing_rows": [], "orphan_rows": []})

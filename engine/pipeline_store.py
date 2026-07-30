@@ -140,6 +140,35 @@ def recount(lines: list[str]) -> None:
             break
 
 
+def orphans(data: dict | list | None = None, lines: list[str] | None = None) -> dict:
+    """Jobs present in one store but not the other.
+
+    WHY THIS EXISTS: jobs.json and pipeline.md are two halves of one datastore, and
+    the dashboard assumes both halves agree. Appending straight to the jobs list —
+    which is one obvious line of code and skips this module entirely — produces a job
+    the board can render but cannot UPDATE: `/api/set-status` looks for the
+    pipeline.md row, does not find it, and returns 404. Dragging the card fails.
+
+    The failure is worse than a plain error, because set_status writes jobs.json
+    BEFORE the row lookup decides the request failed. So the status changes on one
+    side while the user is told nothing happened, and the two halves drift further
+    apart with every retry.
+
+    Returns {"missing_rows": [...], "orphan_rows": [...]} — empty lists when the two
+    halves agree.
+    """
+    data = load_jobs() if data is None else data
+    lines = read_pipeline() if lines is None else lines
+    rows = set()
+    for line in lines:
+        if line.startswith("|"):
+            cells = line.split("|")
+            if len(cells) > 1 and cells[1].strip().isdigit():
+                rows.add(int(cells[1].strip()))
+    ids = {j["id"] for j in jobs_list(data) if isinstance(j.get("id"), int)}
+    return {"missing_rows": sorted(ids - rows), "orphan_rows": sorted(rows - ids)}
+
+
 def insert_job(lines: list[str], rec: dict, pl: dict) -> list[str]:
     """Insert one row + detail block into the pipeline.md line list and recount.
     Mutates `lines` in place. Raises ValueError if the table can't be found."""
