@@ -171,3 +171,78 @@ class RegistryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpelledOutNumberTest(unittest.TestCase):
+    """The digit scanner was blind to prose figures.
+
+    "twenty-five million contacts" and "two hundred centres" passed a cover letter
+    unchecked while "25 million" would have been caught. A guard with a hole that
+    size is worse than an obvious absence, because it reads as coverage.
+
+    These assert on VALUES rather than on the pattern, deliberately: the first
+    attempt at this regex had a word-boundary escape collapse into a literal
+    backspace, so it compiled, looked correct, and matched nothing.
+    """
+
+    def vals(self, text):
+        return [v for v, _, _ in metric_registry._numbers(text)]
+
+    def test_a_scaled_phrase_resolves_to_its_value(self):
+        self.assertIn("25000000", self.vals("twenty-five million contacts"))
+        self.assertIn("200", self.vals("two hundred crisis centres"))
+        self.assertIn("1000000000", self.vals("one billion in assets"))
+
+    def test_a_duration_is_taken_at_any_size(self):
+        # Tenure and duration are where small numbers still mislead, so the
+        # size threshold below is lifted when a time unit follows.
+        self.assertIn("3", self.vals("delivered in three sprints"))
+        self.assertIn("90", self.vals("ninety days"))
+        self.assertIn("7", self.vals("seven years in leadership"))
+        self.assertEqual(sorted(self.vals("two hours to fifteen minutes")), ["15", "2"])
+
+    def test_small_structural_counts_are_left_alone(self):
+        # "four analysts and two data engineers" is a real fact but nobody inflates a
+        # resume with it, and a bare "2" collided with a registered "two hours" at
+        # another employer, reporting a correct bullet as drifting. Under 10 and not
+        # a duration is not worth the false accusations.
+        self.assertEqual(self.vals("hiring four analysts and two data engineers"), [])
+        self.assertEqual(self.vals("across three teams"), [])
+
+    def test_an_idiom_is_excused_by_its_surface_not_its_value(self):
+        # The bug: the noise check asked whether the TOKEN sat inside the matched
+        # pattern. True for "500" in "Fortune 500"; never true for a word-derived
+        # value, where the token is "1000000" and the surface is "million". An idiom
+        # explicitly listed as not-a-claim was reported 19 times across the corpus.
+        text = "a multi-million-dollar cloud strategy"
+        data = {"not_a_claim": [r"multi-million-dollar"], "metrics": [{"id": "x", "tokens": []}]}
+        found = [(v, surf) for v, _, surf in metric_registry._numbers(text)]
+        self.assertTrue(found, "the scanner should still SEE the figure")
+        for _, surf in found:
+            self.assertTrue(metric_registry._is_noise(surf, text, data))
+
+    def test_the_article_one_is_not_a_quantity(self):
+        # "one source of truth" is the phrase this whole repo is built on.
+        self.assertEqual(self.vals("a single source of truth"), [])
+        self.assertEqual(self.vals("one source of truth"), [])
+
+    def test_words_containing_number_words_are_not_matched(self):
+        # 'someone' contains 'one'; 'tension' contains 'ten'. Word boundaries matter,
+        # and the first version of this regex had them silently destroyed.
+        self.assertEqual(self.vals("someone in the room"), [])
+        self.assertEqual(self.vals("tension between the teams"), [])
+        self.assertEqual(self.vals("a foregone conclusion"), [])
+
+    def test_spelled_and_digit_forms_normalise_to_the_same_token(self):
+        # So a metric registered as "200" is matched by "two hundred" with no
+        # second entry to maintain.
+        self.assertIn("200", self.vals("two hundred people"))
+        self.assertIn("200", self.vals("200 people"))
+
+    def test_an_unresolvable_phrase_does_not_crash_or_guess(self):
+        self.assertIsNone(metric_registry.spelled_value("twenty gibberish"))
+
+    def test_a_spelled_figure_is_flagged_when_unregistered(self):
+        s = spec(" served two hundred and forty users.")
+        w = metric_registry.warnings(s, REGISTRY)
+        self.assertTrue(any("UNREGISTERED" in x for x in w), w)

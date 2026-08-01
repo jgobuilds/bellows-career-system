@@ -54,6 +54,96 @@ SKIP_FIELDS = {"contact", "name", "location_dates", "subject", "signoff"}
 
 NUM = re.compile(r"\$?\d[\d,.]*\s?(?:%|k|K|M|\+|x)?")
 
+# SPELLED-OUT figures. The digit scanner above is blind to them, so "twenty-five
+# million contacts" and "two hundred centres" sailed through a cover letter while
+# "25 million" would have been caught. A guard with a hole that size is worse than
+# an obvious absence, because it reads as coverage.
+#
+# Prose is where the softest claims live — a writer reaching for words instead of
+# digits is often reaching for a figure they cannot source — so this is exactly the
+# wrong place to be blind. Deliberately bounded: number words plus their scale and
+# units, not an English parser. Anything it cannot resolve to a value is still
+# reported, because "there is a spelled-out quantity here" is the finding.
+_ONES = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+}
+_TENS = {
+    "twenty": 20,
+    "thirty": 30,
+    "forty": 40,
+    "fifty": 50,
+    "sixty": 60,
+    "seventy": 70,
+    "eighty": 80,
+    "ninety": 90,
+}
+_SCALE = {"hundred": 100, "thousand": 1_000, "million": 1_000_000, "billion": 1_000_000_000}
+_WORDS = set(_ONES) | set(_TENS) | set(_SCALE)
+
+
+def _alt(words: set[str]) -> str:
+    """Longest-first alternation, so "seventeen" wins over "seven"."""
+    return "|".join(sorted(words, key=len, reverse=True))
+
+
+# Built with an explicit format string rather than concatenated raw fragments.
+# An earlier version did the latter, a word-boundary escape became a literal
+# backspace, and the pattern matched nothing while looking entirely correct. It
+# read as coverage and delivered none, which is worse than an obvious gap. The
+# tests exist because of that, and they assert on VALUES, not on the pattern.
+WORD_NUM = re.compile(
+    r"\b(?:{first})(?:[\s-]+(?:{rest}))*\b".format(first=_alt(_WORDS), rest=_alt(_WORDS | {"and"})),
+    re.I,
+)
+
+
+def spelled_value(phrase: str) -> int | None:
+    """The numeric value of a spelled-out phrase, or None if it will not resolve.
+
+    None is not a failure — an unresolvable phrase is still reported as a
+    spelled-out quantity. Refusing to guess is the point.
+    """
+    total = current = 0
+    seen = False
+    for word in re.split(r"[\s-]+", phrase.lower()):
+        if word == "and":
+            continue
+        if word in _ONES:
+            current += _ONES[word]
+            seen = True
+        elif word in _TENS:
+            current += _TENS[word]
+            seen = True
+        elif word in _SCALE:
+            mult = _SCALE[word]
+            if mult >= 1000:
+                total += (current or 1) * mult
+                current = 0
+            else:
+                current = (current or 1) * mult
+            seen = True
+        else:
+            return None
+    return (total + current) if seen else None
+
 
 def load(path: str = REGISTRY) -> dict:
     if not os.path.exists(path):
@@ -62,12 +152,14 @@ def load(path: str = REGISTRY) -> dict:
         return json.load(fh)
 
 
-def _numbers(text: str) -> list[tuple[str, int]]:
+def _numbers(text: str) -> list[tuple[str, int, str]]:
     """Every number-like token in a string, with its offset.
 
-    The offset lets the caller skip numbers already covered by a longer
-    registered phrase: a hyphenated range must be judged as one figure, not as
-    two numbers that happen to be adjacent.
+    Returns (value, offset, surface). The offset lets the caller skip numbers
+    already covered by a longer registered phrase - a hyphenated range must be
+    judged as one figure, not two adjacent ones. The SURFACE is what the text
+    actually said: for a spelled figure the value and the surface differ, and the
+    not-a-claim check has to read the surface or it can never excuse an idiom.
     """
     out = []
     for m in NUM.finditer(text):
@@ -76,7 +168,28 @@ def _numbers(text: str) -> list[tuple[str, int]]:
             continue
         if re.fullmatch(r"(19|20)\d\d", t):  # a year is a date, not a claim
             continue
-        out.append((t, m.start()))
+        out.append((t, m.start(), t))
+
+    # Spelled-out figures, normalised to the digit form the registry stores, so a
+    # metric registered as "200" matches "two hundred" without a second entry.
+    #
+    # Bounded to figures that can actually mislead: >= 10, or any quantity followed
+    # by a time unit. Small structural counts ("four analysts", "three sprints") are
+    # the least valuable thing to gate and the most likely to collide - "two data
+    # engineers" produced a "2" that clashed with a registered "two hours" at
+    # another employer and accused a correct bullet of drifting.
+    for m in WORD_NUM.finditer(text):
+        phrase = m.group(0)
+        if phrase.lower() in ("one", "and"):
+            continue  # "one source of truth" is an article, not a quantity
+        val = spelled_value(phrase)
+        if val is None:
+            continue
+        tail = text[m.end() : m.end() + 14].lower()
+        is_duration = bool(re.match(r"[\s-]*(year|month|week|day|hour|minute|sprint)", tail))
+        if val < 10 and not is_duration:
+            continue
+        out.append((str(val), m.start(), phrase))
     return out
 
 
@@ -122,13 +235,13 @@ def _canon(company: str, data: dict) -> str:
     return company
 
 
-def _is_noise(token: str, text: str, data: dict) -> bool:
+def _is_noise(surface: str, text: str, data: dict) -> bool:
     """Known non-claims: version strings, requisition ids, idioms, scale ranges."""
     for pat in data.get("not_a_claim", []):
         if re.search(pat, text):
             # only excuse the token if the noise pattern actually contains it
             for m in re.finditer(pat, text):
-                if token in m.group(0):
+                if surface.lower() in m.group(0).lower():
                     return True
     return False
 
@@ -182,12 +295,12 @@ def warnings(spec: dict, data: dict | None = None) -> list[str]:
         company = _canon(company, data)
         _, spans = phrase_hits(text)
         covered = {i for a, b in spans for i in range(a, b)}
-        for tok, at in _numbers(text):
+        for tok, at, surface in _numbers(text):
             if at in covered:
                 continue  # already judged as part of a registered phrase
             cands = idx.get(tok)
             if not cands:
-                if _is_noise(tok, text, data):
+                if _is_noise(surface, text, data):
                     continue
                 out.append(
                     f"UNREGISTERED number {tok!r} in: …{text.strip()[:70]}… — "
@@ -230,7 +343,7 @@ def warnings(spec: dict, data: dict | None = None) -> list[str]:
         r"\b(total(?:ling|ing|s)?|combined|altogether|in all|together worth|plus)\b", re.I
     )
     for company, text in _strings(spec):
-        toks = {t for t, _ in _numbers(text)}
+        toks = {t for t, _, _ in _numbers(text)}
         for rule in data.get("never_together", []):
             if rule["a"] in toks and rule["b"] in toks:
                 out.append(f"NEVER-TOGETHER: {rule['a']!r} and {rule['b']!r} — {rule['why']}")

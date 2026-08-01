@@ -81,6 +81,12 @@ def google_query(term: str, location: str, is_remote: bool) -> str:
     return f"{term} {where} jobs posted this week"
 
 
+# `job_url` is the AGGREGATOR's link (Indeed, LinkedIn); `job_url_direct` is the
+# EMPLOYER's own posting, which jobspy resolves for most sites. Capturing only the
+# first cost a real mistake: an aggregator had re-titled and re-located a role, the
+# aggregator link could not be fetched to check, and the lead was scored 2 and
+# dropped as a phantom. It was a genuine US requisition worth a 9. The employer's
+# link is the authoritative record of title, location and comp — keep it.
 CSV_COLS = [
     "company",
     "title",
@@ -88,6 +94,8 @@ CSV_COLS = [
     "date_posted",
     "site",
     "job_url",
+    "job_url_direct",
+    "company_url",
     "search",
     "description",
 ]

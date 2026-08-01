@@ -105,7 +105,11 @@ def main():
                 "status": "to review",
                 "applied": "",
                 "doc": None,
-                "url": r.get("job_url", ""),
+                # Prefer the EMPLOYER's own posting over the aggregator's rewrite:
+                # aggregators re-title and mislocate roles, and their pages often
+                # cannot be fetched to check. Fall back only when it is absent.
+                "url": (r.get("job_url_direct") or "").strip() or r.get("job_url", ""),
+                "url_aggregator": r.get("job_url", ""),
                 # Read from the JD body during the sweep. Absent on rows added
                 # before this existed, and the dashboard treats absent as "unstated".
                 "workAuth": r.get("work_auth", "") or "",
