@@ -1,0 +1,14 @@
+# Line endings, pinned deliberately.
+#
+# The .skill packages are built byte-for-byte from the sources in .claude/skills/,
+# and a drift check compares the two. If a working tree carries CRLF while git
+# stores LF, every bundle looks drifted on a fresh clone and CI fails for a reason
+# that has nothing to do with the change. So the sources are LF everywhere,
+# regardless of anyone's core.autocrlf.
+.claude/skills/** text eol=lf
+
+# The packages are zip archives. Git must never rewrite a byte inside one.
+*.skill binary
+
+# Everything else: normalise in the repo, leave the working tree to the platform.
+* text=auto

@@ -26,9 +26,30 @@ SOURCES = REPO / ".claude" / "skills"
 BUNDLES = REPO / "skills"
 
 
+CRLF, LF = bytes([13, 10]), bytes([10])
+
+
+def _norm(data):
+    """Compare content, not line endings.
+
+    A checkout with core.autocrlf=true hands back CRLF while git stores LF, so a
+    byte comparison would report every bundle as drifted on a clone that changed
+    nothing. This was not hypothetical: the sources were first committed from a
+    CRLF working tree with bundles built to match, which made the drift check fail
+    for anyone cloning fresh. `.gitattributes` now pins the sources to LF, and this
+    keeps the check honest for a contributor whose git is configured otherwise.
+
+    Written with byte values rather than escapes because an escaped one silently
+    became a literal newline here once already.
+    """
+    return data.replace(CRLF, LF)
+
+
 def digest_dir(path):
     return {
-        str(p.relative_to(path)).replace("\\", "/"): hashlib.sha256(p.read_bytes()).hexdigest()
+        str(p.relative_to(path)).replace("\\", "/"): hashlib.sha256(
+            _norm(p.read_bytes())
+        ).hexdigest()
         for p in sorted(path.rglob("*"))
         if p.is_file()
     }
@@ -37,7 +58,7 @@ def digest_dir(path):
 def digest_bundle(path):
     with zipfile.ZipFile(path) as z:
         return {
-            n.split("/", 1)[1]: hashlib.sha256(z.read(n)).hexdigest()
+            n.split("/", 1)[1]: hashlib.sha256(_norm(z.read(n))).hexdigest()
             for n in sorted(z.namelist())
             if not n.endswith("/")
         }

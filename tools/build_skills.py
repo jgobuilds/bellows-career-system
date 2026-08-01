@@ -37,9 +37,25 @@ def files_of(src):
     return sorted(p for p in src.rglob("*") if p.is_file())
 
 
+CRLF, LF = bytes([13, 10]), bytes([10])
+
+
+def _norm(data):
+    """Line endings are not content.
+
+    A checkout that hands back CRLF must not make every bundle look stale.
+    `.gitattributes` pins these sources to LF; this survives a contributor whose
+    git is configured otherwise. Written with byte values rather than escapes
+    because an escaped one silently became a literal here once already.
+    """
+    return data.replace(CRLF, LF)
+
+
 def digest_dir(src):
     return {
-        str(p.relative_to(src)).replace("\\", "/"): hashlib.sha256(p.read_bytes()).hexdigest()
+        str(p.relative_to(src)).replace("\\", "/"): hashlib.sha256(
+            _norm(p.read_bytes())
+        ).hexdigest()
         for p in files_of(src)
     }
 
@@ -49,7 +65,7 @@ def digest_bundle(path):
         return None
     with zipfile.ZipFile(path) as z:
         return {
-            n.split("/", 1)[1]: hashlib.sha256(z.read(n)).hexdigest()
+            n.split("/", 1)[1]: hashlib.sha256(_norm(z.read(n))).hexdigest()
             for n in z.namelist()
             if not n.endswith("/")
         }
