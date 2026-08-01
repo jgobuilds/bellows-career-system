@@ -43,7 +43,8 @@ Everyday commands, dev setup, and the commit-msg gate are all in
 | Path | What |
 |---|---|
 | `engine/` | The Python system — scoring, tailoring, sweeps |
-| `skills/` | Agent skills (resume-tailor, apply-pipeline, career-profile, …) |
+| `.claude/skills/` | **Source** for the 13 agent skills (resume-tailor, apply-pipeline, career-profile, …). Edit here. |
+| `skills/` | **Generated** `.skill` packages — the install path in the README. `python tools/build_skills.py` rebuilds them; never hand-edit an archive. |
 | `starter/` | Templates `setup.py` scaffolds into `personal/` |
 | `personal/` | **Gitignored.** The user's real profile and documents |
 | `tools/` | `ci_local.py`, `check_commit_msg.py`, link smoke tests |
