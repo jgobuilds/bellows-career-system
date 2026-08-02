@@ -238,3 +238,8 @@ COMP_NOTES = "Would flex toward the floor for a Senior title plus real pricing o
 # 14. COACH VOICE  (delivery only — the substance never changes)
 # =============================================================================
 COACH_VOICE = "supportive"
+
+# =============================================================================
+# 15. BACKUP  (where dated archives of personal/ are written — must be OUTSIDE the repo)
+# =============================================================================
+BACKUP_DIR = r"C:\\Users\\avery\\OneDrive\\Bellows Backups"

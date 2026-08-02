@@ -180,6 +180,48 @@ Everything else in the repo is generic machinery and safe to share. There is **n
 build step** — the repo *is* the shareable product; `personal/` simply never gets
 committed.
 
+### Backing it up
+
+The gitignore is why `personal/` needs a backup, not a substitute for one. Every
+commit here is replicated to GitHub; `personal/` exists on exactly one disk.
+
+```bash
+python engine/backup_personal.py
+```
+
+That writes a dated, verified `.zip` to the folder you set as `BACKUP_DIR` in
+`userconfig.py` — a cloud-synced one, typically OneDrive or Google Drive. Leave the
+setting blank and it looks for one under your home directory and proposes a path.
+
+| | |
+|---|---|
+| `--dry-run` | list what would go in, write nothing |
+| `--full` | include the rendered `.docx`/`.pdf` too |
+| `--list` | what is already backed up |
+| `--verify` | re-extract the newest archive and re-hash every file |
+| `--restore <zip> --into <dir>` | put it back |
+
+**It captures sources, not outputs.** Most of `personal/` by size is generated
+documents, and each one rebuilds from a `.json` spec a fraction of its size, so the
+default skips them and the archive comes out around a megabyte. Run `--full`
+occasionally anyway: a document you actually submitted is a record of what you sent,
+which is not quite the same as one you could regenerate.
+
+**Archives are dated, not synced.** Sync is not backup. If something truncates
+`jobs.json`, a sync folder replicates the truncation within seconds and the good copy
+is gone from both ends; yesterday's archive is a separate object that nothing is
+propagating into.
+
+**Restoring is an extract into the repo root.** Paths inside are repo-relative and
+every archive carries a `RESTORE.md` explaining itself, so an archive found years
+later without this README is still usable. `--restore` refuses to overwrite existing
+files unless you pass `--force`.
+
+The archive is entirely personal data, so the tool **refuses a destination inside the
+repo** rather than trusting a gitignore to hold. If you want encryption at rest or
+real snapshot history, use [restic](https://restic.net/) against `personal/` instead
+— this is the small, legible option, not the most capable one.
+
 ## Why Bellows
 
 Most tools are point solutions — a résumé builder *or* a tracker *or* an interview coach *or* an

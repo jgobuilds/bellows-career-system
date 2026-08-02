@@ -46,7 +46,7 @@ Everyday commands, dev setup, and the commit-msg gate are all in
 | `.claude/skills/` | **Source** for the 13 agent skills (resume-tailor, apply-pipeline, career-profile, …). Edit here. |
 | `skills/` | **Generated** `.skill` packages — the install path in the README, and why they exist is in [`skills/README.md`](skills/README.md). `python tools/build_skills.py` rebuilds them; `--check` gates drift in CI. Never hand-edit an archive. |
 | `starter/` | Templates `setup.py` scaffolds into `personal/` |
-| `personal/` | **Gitignored.** The user's real profile and documents |
+| `personal/` | **Gitignored.** The user's real profile and documents. Gitignored means unpublished, not backed up — `python engine/backup_personal.py` writes a dated, verified archive to `BACKUP_DIR`. |
 | `tools/` | `ci_local.py`, `check_commit_msg.py`, link smoke tests |
 | `tests/` | stdlib `unittest` |
 

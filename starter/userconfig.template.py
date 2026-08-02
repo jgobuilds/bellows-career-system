@@ -209,3 +209,18 @@ COMP_NOTES = ""  # any nuance (e.g., startup flex conditions, equity requirement
 #     Pick what actually gets you moving. The Career Hub has a selector, or edit here.
 # =============================================================================
 COACH_VOICE = "supportive"
+
+# =============================================================================
+# 15. BACKUP  (where dated archives of this folder are written)
+#     `personal/` is gitignored, which keeps it out of GitHub and does nothing at
+#     all for the disk it sits on. Point this at a cloud-synced folder and run
+#     `python engine/backup_personal.py` to write a dated, verified archive.
+#
+#     Leave it blank and the tool looks for OneDrive / Google Drive / Dropbox under
+#     your home directory and proposes a path. Set it explicitly if you have more
+#     than one, or if you want the archives somewhere specific.
+#
+#     It must be OUTSIDE this repo. The archive is entirely personal data, and the
+#     tool refuses a destination inside the repo rather than trust a gitignore.
+# =============================================================================
+BACKUP_DIR = ""  # e.g. r"C:\\Users\\you\\OneDrive\\Bellows Backups"
