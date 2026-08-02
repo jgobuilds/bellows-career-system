@@ -42,6 +42,12 @@ jobs:
       - name: Format check (ruff)
         run: ruff format --check .
 
+      # Generated-artifact drift gate. The unit tests below cover this too, but a
+      # named step says what broke and prints the command that fixes it, rather
+      # than surfacing as one assertion inside three hundred.
+      - name: Skill packages match their sources
+        run: python tools/build_skills.py --check
+
       - name: Tests
         run: python -m unittest discover -s tests
 
