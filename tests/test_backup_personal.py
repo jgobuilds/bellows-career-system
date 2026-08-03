@@ -283,3 +283,58 @@ class DestinationIsRealTest(unittest.TestCase):
             self.assertIsInstance(path, str)
             self.assertIsInstance(live, bool)
             self.assertTrue(why)
+
+
+class DiscoveryProposesOnlyLiveRootsTest(unittest.TestCase):
+    """Auto-discovery must not recommend the trap.
+
+    An unsigned-in OneDrive folder exists on a very large number of Windows
+    machines. Discovery that matched on folder name would hand back exactly the
+    destination destination_status() refuses, which would be the tool proposing its
+    own worst failure mode as the default.
+    """
+
+    class _Cfg:
+        pass
+
+    def setUp(self):
+        self._real = bp.cloud_roots
+
+    def tearDown(self):
+        bp.cloud_roots = self._real
+
+    def fake(self, roots):
+        bp.cloud_roots = lambda: roots
+
+    def test_a_dead_root_is_never_proposed(self):
+        self.fake([("C:/Users/x/OneDrive", False, "NO ACCOUNT IS LINKED")])
+        dest, source = bp._dest_from_config(self._Cfg())
+        self.assertIsNone(dest)
+        self.assertIsNone(source)
+
+    def test_a_live_root_is_proposed(self):
+        self.fake([("H:/My Drive", True, "Google Drive mounted at H:")])
+        dest, source = bp._dest_from_config(self._Cfg())
+        self.assertIn("My Drive", dest)
+        self.assertIn("Bellows Backups", dest)
+        self.assertIn("Google Drive", source)
+
+    def test_a_live_root_wins_over_a_dead_one_listed_first(self):
+        self.fake(
+            [
+                ("C:/Users/x/OneDrive", False, "NO ACCOUNT IS LINKED"),
+                ("H:/My Drive", True, "Google Drive mounted at H:"),
+            ]
+        )
+        dest, _ = bp._dest_from_config(self._Cfg())
+        self.assertIn("My Drive", dest)
+
+    def test_an_explicit_setting_always_wins(self):
+        # Someone who typed a path meant it, even a local one; the guard warns at
+        # write time rather than discovery silently overriding them here.
+        self.fake([("H:/My Drive", True, "Google Drive mounted at H:")])
+        cfg = self._Cfg()
+        cfg.BACKUP_DIR = "G:/Backups"
+        dest, source = bp._dest_from_config(cfg)
+        self.assertEqual(dest, "G:/Backups")
+        self.assertEqual(source, "userconfig.py")

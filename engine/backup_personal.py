@@ -396,17 +396,17 @@ def destination_status(
 def _dest_from_config(cfg: Any) -> tuple[str | None, str | None]:
     """BACKUP_DIR from userconfig, else a discovered cloud root, else None.
 
-    Discovery is a convenience, not a policy: it only ever proposes a path, and the
-    caller still has to accept it. Nothing is written outside the repo silently.
+    Discovery proposes only LINKED roots. Matching on a folder name would hand back
+    the same trap destination_status() exists to catch - an unsigned-in OneDrive
+    directory is present on a huge number of Windows machines, and proposing it as
+    the default would be this tool recommending its own worst failure mode.
     """
     d = getattr(cfg, "BACKUP_DIR", None)
     if d:
         return os.path.expandvars(os.path.expanduser(d)), "userconfig.py"
-    home = os.path.expanduser("~")
-    for cand in ("OneDrive", "OneDrive - Personal", "Google Drive", "My Drive", "Dropbox"):
-        p = os.path.join(home, cand)
-        if os.path.isdir(p):
-            return os.path.join(p, "Bellows Backups"), f"discovered ({cand})"
+    for path, live, why in cloud_roots():
+        if live:
+            return os.path.join(path, "Bellows Backups"), f"discovered ({why})"
     return None, None
 
 
