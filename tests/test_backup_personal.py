@@ -18,6 +18,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from typing import ClassVar
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "engine"))
 
@@ -221,3 +222,64 @@ class BackupTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DestinationIsRealTest(unittest.TestCase):
+    """A folder named OneDrive is not OneDrive.
+
+    Windows creates that folder during setup whether or not anyone signs in, so a
+    backup written there succeeds, reports success, and uploads nothing. This is the
+    one failure the rest of the module cannot catch: every hash matches, the restore
+    works, and the archive is still sitting on the disk that was supposed to fail.
+
+    Roots are injected rather than read from the live machine so these assert the
+    LOGIC, not whatever happens to be installed on the runner.
+    """
+
+    ONEDRIVE_LIVE: ClassVar = [("C:/Users/x/OneDrive", True, "OneDrive account is linked")]
+    ONEDRIVE_DEAD: ClassVar = [("C:/Users/x/OneDrive", False, "NO ACCOUNT IS LINKED")]
+
+    def test_a_folder_inside_a_linked_root_is_synced(self):
+        state, _ = bp.destination_status("C:/Users/x/OneDrive/Bellows Backups", self.ONEDRIVE_LIVE)
+        self.assertEqual(state, "synced")
+
+    def test_the_same_path_with_no_account_linked_is_not(self):
+        # Identical path, opposite verdict. The path never told you anything.
+        state, why = bp.destination_status(
+            "C:/Users/x/OneDrive/Bellows Backups", self.ONEDRIVE_DEAD
+        )
+        self.assertEqual(state, "unlinked")
+        self.assertIn("NO ACCOUNT", why)
+
+    def test_unlinked_is_distinct_from_an_ordinary_local_folder(self):
+        # A deliberate second-disk target is a choice; a dead cloud folder is a trap.
+        # Collapsing them into one warning would train someone to ignore both.
+        local, _ = bp.destination_status("G:/Backups", self.ONEDRIVE_DEAD)
+        dead, _ = bp.destination_status("C:/Users/x/OneDrive/Backups", self.ONEDRIVE_DEAD)
+        self.assertEqual(local, "local")
+        self.assertEqual(dead, "unlinked")
+        self.assertNotEqual(local, dead)
+
+    def test_the_root_itself_counts_as_inside_it(self):
+        state, _ = bp.destination_status("C:/Users/x/OneDrive", self.ONEDRIVE_LIVE)
+        self.assertEqual(state, "synced")
+
+    def test_a_sibling_that_merely_starts_with_the_same_name_is_not_inside(self):
+        # "OneDrive-old" must not match "OneDrive" on a bare prefix compare.
+        state, _ = bp.destination_status("C:/Users/x/OneDrive-old/Backups", self.ONEDRIVE_LIVE)
+        self.assertEqual(state, "local")
+
+    def test_no_cloud_client_at_all_reads_as_local(self):
+        state, why = bp.destination_status("C:/anywhere", [])
+        self.assertEqual(state, "local")
+        self.assertIn("not inside any linked", why)
+
+    def test_detection_never_raises_on_this_machine(self):
+        # Registry reads and drive probing must degrade to "found nothing" rather
+        # than take the backup down with them, on any platform.
+        roots = bp.cloud_roots()
+        self.assertIsInstance(roots, list)
+        for path, live, why in roots:
+            self.assertIsInstance(path, str)
+            self.assertIsInstance(live, bool)
+            self.assertTrue(why)

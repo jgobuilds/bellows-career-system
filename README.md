@@ -200,6 +200,8 @@ setting blank and it looks for one under your home directory and proposes a path
 | `--list` | what is already backed up |
 | `--verify` | re-extract the newest archive and re-hash every file |
 | `--restore <zip> --into <dir>` | put it back |
+| `--where` | which cloud folders on this machine are actually linked |
+| `--allow-local` | accept a destination nothing is uploading |
 
 **It captures sources, not outputs.** Most of `personal/` by size is generated
 documents, and each one rebuilds from a `.json` spec a fraction of its size, so the
@@ -216,6 +218,15 @@ propagating into.
 every archive carries a `RESTORE.md` explaining itself, so an archive found years
 later without this README is still usable. `--restore` refuses to overwrite existing
 files unless you pass `--force`.
+
+**It checks that the destination is really syncing.** A folder named `OneDrive` is not
+OneDrive — Windows creates that folder during setup whether or not anyone ever signs
+in, so writing there succeeds, reports success, and uploads nothing. The tool reads
+the sync client's own configuration instead of trusting the folder name, and stops
+with exit 3 if the destination is a dead cloud folder or a plain local directory.
+`--where` shows what is actually linked; `--allow-local` accepts a second physical
+disk if that is genuinely what you meant, which protects against a failed drive but
+not against losing the machine.
 
 The archive is entirely personal data, so the tool **refuses a destination inside the
 repo** rather than trusting a gitignore to hold. If you want encryption at rest or

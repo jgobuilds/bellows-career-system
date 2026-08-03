@@ -283,6 +283,113 @@ def prune(dest_dir: str, keep: int) -> list[str]:
     return doomed
 
 
+# ------------------------------------------------------- is the destination real?
+#
+# A folder named OneDrive is not OneDrive. Windows creates that folder during setup
+# whether or not anyone ever signs in, so writing to it succeeds, reports success,
+# and uploads nothing. That is worse than having no backup, because no backup at
+# least tells you the truth. The checks below establish whether a sync client is
+# actually LINKED, not whether a directory with a promising name exists.
+
+
+def _windows() -> bool:
+    return os.name == "nt"
+
+
+def _onedrive_roots() -> list[tuple[str, bool, str]]:
+    """(path, live, why) for each configured OneDrive folder."""
+    if not _windows():
+        return []
+    try:
+        import winreg
+    except ImportError:  # pragma: no cover - Windows-only import
+        return []
+    out: list[tuple[str, bool, str]] = []
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\OneDrive\Accounts") as k:
+            i = 0
+            while True:
+                try:
+                    sub = winreg.EnumKey(k, i)
+                except OSError:
+                    break
+                i += 1
+                try:
+                    with winreg.OpenKey(k, sub) as a:
+                        folder, _ = winreg.QueryValueEx(a, "UserFolder")
+                    if folder:
+                        out.append((folder, True, f"OneDrive account {sub} is linked"))
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    if not out:
+        home = os.path.join(os.path.expanduser("~"), "OneDrive")
+        if os.path.isdir(home):
+            out.append((home, False, "the OneDrive folder exists but NO ACCOUNT IS LINKED"))
+    return out
+
+
+def _gdrive_roots() -> list[tuple[str, bool, str]]:
+    if not _windows():
+        return []
+    installed = os.path.isdir(os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "DriveFS"))
+    out: list[tuple[str, bool, str]] = []
+    for letter in "GHIJKLMNOPQRSTUVWXYZ":
+        mount = f"{letter}:\\My Drive"
+        if os.path.isdir(mount):
+            out.append((mount, True, f"Google Drive mounted at {letter}:"))
+    home = os.path.join(os.path.expanduser("~"), "Google Drive")
+    if os.path.isdir(home):
+        out.append(
+            (
+                home,
+                installed,
+                "Google Drive folder" + ("" if installed else ", client NOT installed"),
+            )
+        )
+    return out
+
+
+def _dropbox_roots() -> list[tuple[str, bool, str]]:
+    if not _windows():
+        return []
+    info = os.path.join(os.environ.get("LOCALAPPDATA", ""), "Dropbox", "info.json")
+    if not os.path.isfile(info):
+        return []
+    try:
+        with open(info, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return []
+    return [(v["path"], True, "Dropbox is linked") for v in data.values() if v.get("path")]
+
+
+def cloud_roots() -> list[tuple[str, bool, str]]:
+    return _onedrive_roots() + _gdrive_roots() + _dropbox_roots()
+
+
+def _under(child: str, parent: str) -> bool:
+    c, p = os.path.abspath(child).rstrip("\\/"), os.path.abspath(parent).rstrip("\\/")
+    return c.lower() == p.lower() or c.lower().startswith(p.lower() + os.sep)
+
+
+def destination_status(
+    dest: str, roots: list[tuple[str, bool, str]] | None = None
+) -> tuple[str, str]:
+    """('synced' | 'unlinked' | 'local', explanation).
+
+    'unlinked' is the dangerous one and the reason this function exists: the path
+    looks like cloud storage, so everything reads as fine, and nothing leaves the
+    machine. It is called out separately from an ordinary local folder because a
+    deliberate local target is a choice, and this is a trap.
+    """
+    for path, live, why in cloud_roots() if roots is None else roots:
+        if _under(dest, path):
+            return ("synced" if live else "unlinked"), why
+    return "local", "not inside any linked cloud-sync folder on this machine"
+
+
 # --------------------------------------------------------------------------- CLI
 
 
@@ -326,6 +433,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     ap.add_argument("--dest", metavar="DIR", help="override the backup destination")
     ap.add_argument("--keep", type=int, default=14, help="archives to retain (default 14)")
+    ap.add_argument(
+        "--allow-local",
+        action="store_true",
+        help="accept a destination that no sync client is uploading (e.g. a second physical disk)",
+    )
+    ap.add_argument("--where", action="store_true", help="show cloud folders found on this machine")
     a = ap.parse_args(argv)
 
     import _paths  # noqa: F401
@@ -346,6 +459,23 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"    {s}")
         return 0
 
+    if a.where:
+        roots = cloud_roots()
+        if not roots:
+            print("  No cloud-sync client is linked on this machine.")
+            print("  Install and sign in to OneDrive, Google Drive, or Dropbox, then set")
+            print("  BACKUP_DIR in personal/userconfig.py to a folder inside it.")
+            return 1
+        print("  Cloud folders on this machine:\n")
+        for path, live, why in roots:
+            print(f"    {'LIVE  ' if live else 'DEAD  '} {path}\n            {why}")
+        # Non-zero when nothing is actually uploading, even though folders were
+        # found: "I listed something" must not read as "you are covered".
+        if not any(live for _, live, _ in roots):
+            print("\n  None of these are syncing. Nothing here leaves the machine.")
+            return 1
+        return 0
+
     dest: str | None = a.dest
     source: str | None = "--dest"
     if not dest:
@@ -362,6 +492,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  REFUSED: destination is inside the repo.\n    {dest}")
         print("  This archive is entirely PII. Put it somewhere the repo cannot reach.")
         return 2
+
+    # Checked before writing, so the warning is not buried under a success report.
+    state, why = destination_status(dest)
+    if state != "synced" and not a.allow_local:
+        label = "IS NOT SYNCING" if state == "unlinked" else "IS LOCAL ONLY"
+        print(f"  ⚠ THE DESTINATION {label}\n    {dest}")
+        print(f"    {why}\n")
+        if state == "unlinked":
+            print("  A folder named after a cloud service is not that cloud service. Writing")
+            print("  here succeeds and uploads nothing, which is worse than no backup because")
+            print("  no backup does not claim to be one.\n")
+        print("  Fix it one of these ways:")
+        print("    - sign in to the sync client, then re-run")
+        print("    - `--where` to see what IS linked here")
+        print("    - `--allow-local` if a second physical disk is what you meant")
+        print("      (protects against a disk failure, not against losing the machine)")
+        return 3
 
     if a.do_list:
         got = existing(dest)
