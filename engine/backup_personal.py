@@ -330,12 +330,20 @@ def _onedrive_roots() -> list[tuple[str, bool, str]]:
     return out
 
 
+# Every letter, not a plausible-looking subset. Drive takes the first free letter it
+# is offered and the user can set any of them in its settings, so a scan starting
+# partway through the alphabet reports "not installed" for a Drive that is running
+# and mounted. That is not a harmless miss: it is this tool telling someone their
+# working cloud backup does not exist. A stat on an unused letter costs nothing.
+_DRIVE_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+
 def _gdrive_roots() -> list[tuple[str, bool, str]]:
     if not _windows():
         return []
     installed = os.path.isdir(os.path.join(os.environ.get("LOCALAPPDATA", ""), "Google", "DriveFS"))
     out: list[tuple[str, bool, str]] = []
-    for letter in "GHIJKLMNOPQRSTUVWXYZ":
+    for letter in _DRIVE_LETTERS:
         mount = f"{letter}:\\My Drive"
         if os.path.isdir(mount):
             out.append((mount, True, f"Google Drive mounted at {letter}:"))

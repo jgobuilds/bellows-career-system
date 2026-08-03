@@ -338,3 +338,26 @@ class DiscoveryProposesOnlyLiveRootsTest(unittest.TestCase):
         dest, source = bp._dest_from_config(cfg)
         self.assertEqual(dest, "G:/Backups")
         self.assertEqual(source, "userconfig.py")
+
+
+class DriveLetterScanTest(unittest.TestCase):
+    """Scan every drive letter, not a plausible-looking subset.
+
+    REGRESSION: the scan started at G on the assumption that a cloud mount lands
+    late in the alphabet. A real install mounted at E and the tool reported no
+    Google Drive on a machine where Drive was installed, running, and syncing.
+
+    The direction of that failure is what makes it worth a test. It did not write
+    anywhere unsafe - the guard refused and exited non-zero, which was correct - but
+    it told someone their working cloud backup did not exist, and the obvious next
+    move on that advice is to reinstall or repoint something that was already fine.
+    Drive takes the first free letter it is offered and the user can override it, so
+    there is no subset that is safe to assume.
+    """
+
+    def test_every_letter_is_scanned(self):
+        missing = [c for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" if c not in bp._DRIVE_LETTERS]
+        self.assertEqual(missing, [], f"drive letters not scanned: {missing}")
+
+    def test_the_letter_that_actually_broke_it_is_covered(self):
+        self.assertIn("E", bp._DRIVE_LETTERS)
