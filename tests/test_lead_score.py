@@ -289,3 +289,76 @@ class TestScoreCeilings(unittest.TestCase):
             for lvl in (0, 1, 3):
                 for raw in range(11):
                     self.assertLessEqual(lead_score.cap_total(raw, lane, lvl), raw)
+
+
+class SoftAnchorTest(unittest.TestCase):
+    """Anchors that another discipline also uses.
+
+    Reporting, information and insight mean data work in the right company and
+    something else entirely in the wrong one. A tax role reached the top bucket on
+    "reporting" plus "Director": "Senior Director, Transaction Advisory Services //
+    Tax Reporting and Restructuring".
+
+    Two things were wrong. The word one place to the left decides the meaning and
+    was not being read, and a soft word was allowed to certify the very lane match
+    it had caused - circular, so it could never be wrong.
+
+    Mechanism, not totals: the totals depend on which config is loaded.
+    """
+
+    def test_the_discipline_in_front_of_the_word_disqualifies_it(self):
+        for title, term in (
+            ("Senior Director, Transaction Advisory Services // Tax Reporting", "reporting"),
+            ("Director of Financial Reporting", "reporting"),
+            ("Director, Statutory Reporting", "reporting"),
+            ("VP, Regulatory Reporting", "reporting"),
+        ):
+            self.assertFalse(lead_score.lane_is_anchored(title.lower(), term), title)
+
+    def test_the_discipline_after_the_word_disqualifies_it_too(self):
+        # Checking only leftward let Chief Information Security Officer through.
+        for title in ("Chief Information Security Officer", "Director of Information Technology"):
+            self.assertFalse(lead_score.lane_is_anchored(title.lower(), "information"), title)
+
+    def test_a_soft_word_cannot_certify_the_match_it_caused(self):
+        # The circular case: "reporting" matched the lane, so letting "reporting"
+        # also anchor it means the check can never fail.
+        self.assertFalse(lead_score.lane_is_anchored("head of tax reporting", "reporting"))
+
+    def test_genuine_reporting_and_insight_roles_still_anchor(self):
+        for title, term in (
+            ("Director of Reporting and Analytics", "reporting"),
+            ("Head of Reporting", "reporting"),
+            ("Director, Regulatory Reporting and Data Governance", "reporting"),
+            ("VP, Insights and Analytics", "insights"),
+            ("Head of Data and Insights", "insights"),
+        ):
+            self.assertTrue(lead_score.lane_is_anchored(title.lower(), term), title)
+
+
+class AiAnchorsTheLaneTest(unittest.TestCase):
+    """AI is a data anchor.
+
+    Its absence was a silent recall hole rather than a visible bug. "AVP, AI COE
+    Leader", "Senior Director - AI Operations & Enablement" and "Director, AI
+    Governance & Portfolio" were all demoted to the floor for having "no data
+    anchor" - and all three are exactly the roles this search exists to surface.
+
+    A false Keep costs a minute of reading. A lead that never appears is never
+    known about, so the two errors are not symmetric.
+    """
+
+    def test_ai_anchors_a_bare_lane_word(self):
+        for title, term in (
+            ("AVP, AI COE Leader", "ai coe"),
+            ("Senior Director - AI Operations & Enablement", "enablement"),
+            ("Director, AI Governance & Portfolio", "ai governance"),
+        ):
+            self.assertTrue(lead_score.lane_is_anchored(title.lower(), term), title)
+
+    def test_spelled_out_artificial_intelligence_anchors_too(self):
+        self.assertTrue(
+            lead_score.lane_is_anchored(
+                "director of artificial intelligence enablement", "enablement"
+            )
+        )

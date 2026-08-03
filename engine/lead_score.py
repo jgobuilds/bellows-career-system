@@ -167,19 +167,84 @@ _ANCHOR_WORDS = (
     "sql",
     "ml",
     "machine learning",
+    # AI anchors the lane too. Its absence was a silent recall hole: "AVP, AI COE
+    # Leader", "Director, AI Governance & Portfolio" and "Senior Director - AI
+    # Operations & Enablement" all dropped to the floor for having "no data anchor",
+    # and all three are roles this search exists to find. A false Keep wastes a
+    # minute; a lead that never appears is never known about.
+    "ai",
+    "artificial intelligence",
     "quality",
     "stewardship",
 )
 ANCHOR = CFG.terms_to_regex(list(_ANCHOR_WORDS))
+
+# Some anchors are perfectly ordinary words in accounting, compliance and IT, and
+# they anchored a tax role into Keep: "Senior Director, Transaction Advisory
+# Services // Tax Reporting and Restructuring" scored 7 on "reporting" plus
+# "Director". Reporting, information and insight all mean data work in the right
+# company and something else entirely in the wrong one.
+#
+# Rather than drop them - "Director of Reporting and Insights" is genuinely in
+# lane - they are disqualified when the word immediately in front of them names
+# the other discipline. "Tax reporting" is accounting, "reporting and analytics"
+# is not, and the difference is one word to the left.
+_SOFT_ANCHORS = ("reporting", "information", "insight", "insights")
+# The discipline can sit on either side of the word. "Tax reporting" is accounting;
+# "information security" is security. Both directions are needed: checking only to
+# the left let Chief Information Security Officer through.
+_QUALIFIED_AWAY = CFG.terms_to_regex(
+    [
+        f"{q} {w}"
+        for q in (
+            "tax",
+            "financial",
+            "statutory",
+            "regulatory",
+            "sec",
+            "credit",
+            "expense",
+            "payroll",
+            "clinical",
+            "medical",
+            "legal",
+            "sustainability",
+            "esg",
+        )
+        for w in _SOFT_ANCHORS
+    ]
+    + [f"{w} {q}" for w in _SOFT_ANCHORS for q in ("security", "technology", "systems")]
+)
+
+
+def _self_proving(term):
+    """Does this term prove the data lane on its own, without help from the title?
+
+    A term made only of soft anchors does not. "Reporting" matching "reporting"
+    looks like proof and is circular: it was the soft word that pulled the lane
+    match in, so letting it also certify the match means it can never be wrong.
+    """
+    if not ANCHOR.search(term):
+        return False
+    return bool(
+        ANCHOR.sub(lambda m: "" if m.group(0) in _SOFT_ANCHORS else m.group(0), term).strip()
+    )
 
 
 def lane_is_anchored(title, matched_term):
     """Does this lane match actually point at data work?
 
     True when the matched term proves it itself, or when the title says data
-    somewhere else. False for a bare lane word floating in a non-data title.
+    somewhere else. False for a bare lane word floating in a non-data title, and
+    false when the only anchor is one another discipline has already claimed.
     """
-    return bool(ANCHOR.search(matched_term or "") or ANCHOR.search(title or ""))
+    term = (matched_term or "").lower()
+    if _self_proving(term):
+        return True
+    # Otherwise the title has to carry it - with any anchor another discipline has
+    # qualified ("tax reporting", "information security") removed first.
+    stripped = _QUALIFIED_AWAY.sub(" ", (title or "").lower())
+    return bool(ANCHOR.search(stripped))
 
 
 # What the rest of the rubric may add up to, given how well the LANE fits. Level,
@@ -248,6 +313,14 @@ def score_row(title, location):
     elif strong:
         lane = 4
         reasons.append("strong lane (governance/enablement/platform)")
+    elif (med := LANE_MED.search(t)) and not lane_is_anchored(t, med.group(0)):
+        # The same test the strong lane gets. Skipping it here let a tax role reach
+        # Keep on "reporting" plus "Director": the anchor check existed, and the
+        # branch that needed it most never called it. Medium lane terms are the
+        # ordinary English ones - reporting, insights, information - so they are
+        # MORE likely to float in an unrelated title, not less.
+        lane = 1
+        reasons.append(f"'{med.group(0)}' with no data anchor in the title (-2)")
     elif LANE_MED.search(t):
         lane = 3
         reasons.append("data/analytics lane")
