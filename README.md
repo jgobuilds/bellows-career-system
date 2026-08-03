@@ -202,6 +202,9 @@ setting blank and it looks for one under your home directory and proposes a path
 | `--restore <zip> --into <dir>` | put it back |
 | `--where` | which cloud folders on this machine are actually linked |
 | `--allow-local` | accept a destination nothing is uploading |
+| `--schedule [DAY] --at HH:MM` | install a weekly run (Windows; default Sunday 09:00) |
+| `--schedule-status` | is it installed, and how did the last run go |
+| `--unschedule` | remove the scheduled run; archives are untouched |
 
 **It captures sources, not outputs.** Most of `personal/` by size is generated
 documents, and each one rebuilds from a `.json` spec a fraction of its size, so the
@@ -218,6 +221,13 @@ propagating into.
 every archive carries a `RESTORE.md` explaining itself, so an archive found years
 later without this README is still usable. `--restore` refuses to overwrite existing
 files unless you pass `--force`.
+
+**A scheduled run writes a log.** `--schedule` installs a weekly Windows task that
+appends every run to `personal/data/backup.log`, and `--schedule-status` reads it
+back. A weekly backup is exactly the thing that fails quietly for two months — the
+destination unmounts, a drive letter moves, the disk fills — so the last outcome has
+to be a question with an answer. Note that Task Scheduler's own "Last Result: 0" only
+means it launched the wrapper, not that the backup worked; the log is the truth.
 
 **It checks that the destination is really syncing.** A folder named `OneDrive` is not
 OneDrive — Windows creates that folder during setup whether or not anyone ever signs

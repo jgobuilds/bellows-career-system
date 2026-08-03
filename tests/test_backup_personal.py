@@ -361,3 +361,53 @@ class DriveLetterScanTest(unittest.TestCase):
 
     def test_the_letter_that_actually_broke_it_is_covered(self):
         self.assertIn("E", bp._DRIVE_LETTERS)
+
+
+class SchedulingTest(unittest.TestCase):
+    """The weekly task, and the two things about it that bite.
+
+    A scheduled backup is the one that nobody watches, so both failures here are
+    silent by construction: a wrapper that runs nothing, and an archive that quietly
+    carries machine-specific state to a machine where it is wrong.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_the_wrapper_names_the_script_the_repo_and_the_log(self):
+        w = bp.write_wrapper(str(self.dir / "sub" / "run.cmd"), str(self.dir / "backup.log"))
+        body = Path(w).read_text(encoding="utf-8")
+        self.assertIn("backup_personal.py", body)
+        self.assertIn("--log", body)
+        self.assertIn("cd /d", body)  # runs from the repo, not wherever the scheduler starts
+        self.assertTrue(body.startswith("@echo off"))
+
+    def test_the_wrapper_uses_crlf(self):
+        # A .cmd with bare LF line endings fails in ways that are hard to read.
+        w = bp.write_wrapper(str(self.dir / "run.cmd"), str(self.dir / "l.log"))
+        self.assertIn(bytes([13, 10]), Path(w).read_bytes())
+
+    def test_the_schedule_day_and_time_are_validated(self):
+        self.assertEqual(bp.validate_schedule("sun", "09:00"), ("SUN", "09:00"))
+        self.assertEqual(bp.validate_schedule("Monday", "23:59"), ("MON", "23:59"))
+        for bad_day in ("funday", "", "S"):
+            with self.assertRaises(ValueError):
+                bp.validate_schedule(bad_day, "09:00")
+        for bad_time in ("9:00", "24:00", "09:60", "morning"):
+            with self.assertRaises(ValueError):
+                bp.validate_schedule("SUN", bad_time)
+
+    def test_machine_specific_files_never_enter_an_archive(self):
+        # REGRESSION: the first scheduled run backed up its own wrapper, which holds
+        # absolute paths to this checkout and this interpreter. Restoring that onto
+        # another machine yields a scheduled task pointing at directories that do not
+        # exist - and it would look like it restored fine.
+        for name in ("scheduled-backup.cmd", "scheduled-sweep.cmd", "backup.log"):
+            self.assertTrue(bp.is_derived(name), f"{name} must not be archived")
+
+    def test_the_tool_does_not_archive_its_own_log(self):
+        self.assertTrue(bp.is_derived("backup.log"))
