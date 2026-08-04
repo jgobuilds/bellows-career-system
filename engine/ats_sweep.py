@@ -572,6 +572,13 @@ def _poll_company(c, lane_ok, opts):
     except urllib.error.HTTPError as e:
         say(f"  - {c['ats']}:{_label(c)} HTTP {e.code} (skip)")
         result["outcome"] = "error"
+        # A 404/410 is a DEAD SLUG, not a bad moment: the board moved or the company
+        # left this ATS. Named in the summary because a bare count ("10 unreachable")
+        # scrolls past in a hundred lines of per-company output, and these went
+        # unnoticed for weeks while quietly costing a request each and adding the
+        # noise that made real failures harder to see.
+        if e.code in (404, 410):
+            result["dead"] = f"{c['ats']}:{_label(c)}"
         return result
     except Exception as e:
         say(f"  - {c['ats']}:{_label(c)} error: {e} (skip)")
@@ -646,6 +653,7 @@ def sweep(
             return bool(_lane.search(t) and _lvl.search(t) and not _block.search(t))
 
     kept, checked, errors, limited = [], 0, 0, 0
+    dead_slugs: list[str] = []
     _state = _load_state()
     _last = set(_state.get("companies") or [])
     _since = _days_since(_state.get("last_run"))
@@ -700,6 +708,8 @@ def sweep(
             limited += 1
         elif r["outcome"] == "error":
             errors += 1
+            if r.get("dead"):
+                dead_slugs.append(r["dead"])
         kept.extend(r["rows"])
 
     try:
@@ -731,6 +741,14 @@ def sweep(
             + f"{len(out)} unique in-lane roles.",
             file=sys.stderr,
         )
+        if dead_slugs:
+            print(
+                f"  {len(dead_slugs)} DEAD board(s) returning 404 - fix the slug or "
+                "retire them; they poll for nothing every sweep:",
+                file=sys.stderr,
+            )
+            for d in dead_slugs:
+                print(f"    {d}", file=sys.stderr)
     return out
 
 
