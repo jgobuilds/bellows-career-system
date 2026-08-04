@@ -12,16 +12,35 @@ cd bellows-career-system
 python setup.py                                   # scaffolds gitignored personal/ from the templates
 pip install -r requirements.txt -r requirements-dev.txt
 pre-commit install                                # lint + hygiene gate before each commit
-# pre-PUSH gate: reproduces CI's environment before every push (~15s). Plain script,
-# NOT `pre-commit install --hook-type pre-push` (that hangs on Windows — see
-# .pre-commit-config.yaml). Install it once:
-printf '#!/bin/sh\nexec python tools/ci_local.py\n' > .git/hooks/pre-push
-chmod +x .git/hooks/pre-push
-# commit-msg gate: keeps career details (employer names, figures, quoted document
-# text) out of permanent public commit messages — see House rules below.
-printf '#!/bin/sh\nexec python tools/check_commit_msg.py "$1"\n' > .git/hooks/commit-msg
-chmod +x .git/hooks/commit-msg
 ```
+
+### The gates are installed for you
+
+`setup.py` installs the **pre-push** and **commit-msg** hooks, because `.git/hooks/` is
+never tracked by git — a fresh clone has no gates at all, and an instruction people have
+to copy by hand is one they skip. It never overwrites a hook you already have; it reports
+what it left alone.
+
+- **pre-push** runs `tools/ci_local.py`, which reproduces CI's *environment* rather than
+  yours. Deliberately a plain script, not `pre-commit install --hook-type pre-push` —
+  that wrapper ran commit-stage hooks at push time and hung on Windows (see
+  `.pre-commit-config.yaml`).
+- **commit-msg** runs `tools/check_commit_msg.py`, keeping career details (employer
+  names, figures, quoted document text) out of permanent public commit messages — see
+  House rules below.
+
+To install them without a full setup run, or to check what you already have:
+
+```bash
+python -c "import setup; print(setup.install_hooks())"   # -> (installed, left_alone, note)
+ls -l .git/hooks/pre-push .git/hooks/commit-msg          # both must be executable
+```
+
+**A green local run is not a green build.** `ci_local.py` reproduces CI's config *and*
+its OS — including a mypy pass with `--platform linux`, because typeshed gates
+Windows-only modules behind `sys.platform` and a Windows type check will happily accept
+a module CI rejects. That gap shipped two red builds. When in doubt after a push,
+`gh run list --limit 3` is the actual answer.
 
 `tools/ci_local.py` runs the full gate (ruff, format, tests, mypy) against a
 scaffolded **template** config in a temp copy of the tracked tree — i.e. what CI
