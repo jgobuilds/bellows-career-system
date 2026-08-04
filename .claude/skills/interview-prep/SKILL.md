@@ -37,10 +37,26 @@ don't rebuild per interview.
 - Flag competencies with **no strong story** — those are prep gaps to fill or answer honestly.
 
 ### 2 — Analyze the target interview
-For a specific role, read the JD (or role/level) and infer what it will probe: behavioral
-areas, role-specific/technical topics, leadership/scope questions, domain knowledge, and
-the classics every interview asks. Note the interview *type* and stakes (recruiter screen
-vs. hiring-manager vs. panel vs. exec). Method in `references/mock-drill.md`.
+
+**First: look for research that already exists on this company and these people.** If you keep
+a company/people research store, read it BEFORE writing anything — the profile, any interview
+brief, and the record for each named interviewer. Look even when you are confident there is
+nothing there; the lookup is one command and skipping it is how prep gets built twice, worse
+the second time.
+
+When research does exist, the prep pack is a **delta on it**, not a parallel document: point
+at the brief, add only what is new or newer, and push anything you learn back into the store so
+the durable copy stays current. Two documents covering the same ground will disagree, and the
+reader cannot tell which is current.
+
+Two things the research answers that a JD never will, and both change the whole conversation:
+**who the interviewer actually is** — a prospective direct report is a completely different
+interview from a recruiter screen — and **whether the company is somewhere worth landing.**
+
+Then read the JD (or role/level) and infer what it will probe: behavioral areas,
+role-specific/technical topics, leadership/scope questions, domain knowledge, and the classics
+every interview asks. Note the interview *type* and stakes (recruiter screen vs.
+hiring-manager vs. panel vs. exec). Method in `references/mock-drill.md`.
 
 ### 3 — Build the per-role prep pack
 Write `personal/applications/<company>/interview-prep.md`:
