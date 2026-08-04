@@ -480,6 +480,37 @@ def fetch_smartrecruiters(c):
     return rows
 
 
+def _workday_location(job, path):
+    """Location for a Workday posting, falling back to the city in its own URL.
+
+    Not every tenant populates locationsText, and one sent eight blank rows in a single
+    sweep. The SCORE was never wrong - the scorer already treats an absent location as
+    not-remote and caps those rows at Watch - so this is a legibility fix, not a
+    correctness one.
+
+    What it costs to leave blank is a human's time. A row reading "Senior Director,
+    Data Platform & Governance" with no location is indistinguishable from a strong
+    local lead until you open the posting; the same row reading "Billund?" is dismissed
+    in a second by anyone who is not relocating to Denmark.
+
+    The externalPath carries the city: /job/Billund/Senior-Director--Data-Platform...
+    Less precise than the real field and much better than silence, so it is marked with
+    a trailing "?" - an honest hedge that the geo rules still match on.
+    """
+    text = (job.get("locationsText") or "").strip()
+    if text:
+        return text
+    parts = [p for p in (path or "").split("/") if p]
+    # /job/<City>/<Title>_<req> - the city sits immediately after "job".
+    if "job" in parts:
+        i = parts.index("job")
+        if i + 1 < len(parts):
+            city = parts[i + 1].replace("-", " ").strip()
+            if city and not city.lower().startswith("r-"):
+                return f"{city}?"
+    return ""
+
+
 def fetch_workday(c):
     base = f"https://{c['tenant']}.{c['wd']}.myworkdayjobs.com"
     list_url = f"{base}/wday/cxs/{c['tenant']}/{c['site']}/jobs"
@@ -501,7 +532,7 @@ def fetch_workday(c):
                 {
                     "company": c["tenant"],
                     "title": (job.get("title") or "").strip(),
-                    "location": (job.get("locationsText") or "").strip(),
+                    "location": _workday_location(job, path),
                     "date_posted": "",  # Workday list gives relative text only
                     "site": "workday",
                     "job_url": f"{base}/en-US/{c['site']}{path}",

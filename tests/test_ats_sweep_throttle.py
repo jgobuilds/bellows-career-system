@@ -285,3 +285,55 @@ class TestParallelByAts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WorkdayLocationFallbackTest(unittest.TestCase):
+    """A blank location costs a human's time, not the score.
+
+    Not every Workday tenant populates locationsText; one sent eight blank rows in a
+    single sweep. The scorer already handles absence correctly - it treats it as
+    not-remote and caps the row at Watch - so this is legibility, not correctness, and
+    it is worth being precise about which.
+
+    What it costs is triage speed. "Senior Director, Data Platform & Governance" with
+    no location is indistinguishable from a strong local lead until you open it; the
+    same row reading "Billund?" is dismissed instantly by someone not relocating.
+    """
+
+    def test_the_real_field_always_wins(self):
+        self.assertEqual(
+            ats_sweep._workday_location({"locationsText": "Boston, MA"}, "/job/Billund/X_1"),
+            "Boston, MA",
+        )
+
+    def test_the_city_is_recovered_from_the_url_when_the_field_is_blank(self):
+        got = ats_sweep._workday_location(
+            {"locationsText": ""}, "/job/Billund/Senior-Director--Data-Platform_003"
+        )
+        self.assertEqual(got, "Billund?")
+
+    def test_multiword_cities_survive(self):
+        self.assertEqual(
+            ats_sweep._workday_location({}, "/job/New-York-City/Head-of-Data_9"), "New York City?"
+        )
+
+    def test_the_guess_is_marked_as_one(self):
+        # The trailing "?" keeps it honest: geo rules can still match the city, and a
+        # human reading the row can see it was inferred rather than reported.
+        self.assertTrue(ats_sweep._workday_location({}, "/job/London/X_1").endswith("?"))
+
+    def test_the_score_was_never_the_problem(self):
+        # Pinning the thing that was almost misdescribed: a blank location and a
+        # recovered foreign one score identically, because the scorer already treats
+        # absence as not-remote. This fix buys legibility, and the test says so.
+        import lead_score
+
+        title = "Senior Director, Data Platform & Governance"
+        blank = lead_score.score_row(title, "")
+        recovered = lead_score.score_row(title, "Billund?")
+        self.assertEqual(blank[0], recovered[0])
+        self.assertEqual(blank[1], recovered[1])
+
+    def test_an_unusable_path_yields_empty_rather_than_a_wrong_guess(self):
+        for path in ("", "/details/Foo_1", None):
+            self.assertEqual(ats_sweep._workday_location({}, path), "")

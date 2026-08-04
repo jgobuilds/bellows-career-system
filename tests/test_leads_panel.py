@@ -144,6 +144,28 @@ class CarryForwardTest(unittest.TestCase):
     def test_a_missing_previous_file_is_not_an_error(self):
         self.assertEqual(jobspy_sweep.carry_forward(os.path.join(self._tmp.name, "x.csv"), 30), [])
 
+    def test_the_carry_window_is_bounded_regardless_of_the_look_back(self):
+        # REGRESSION: this reused MAX_AGE_DAYS (60), so leads_raw stopped being
+        # "recent leads" and became a rolling two-month archive that re-proposed the
+        # same ageing postings every run - one sweep carried 160 rows aged 15-60 days.
+        # Carry-forward only bridges the gap BETWEEN sweeps.
+        self.write(
+            [
+                {"company": "Fresh", "title": "Head of Data", "date_posted": self.days_ago(3)},
+                {"company": "Ageing", "title": "VP Data", "date_posted": self.days_ago(30)},
+            ]
+        )
+        got = [r["company"] for r in jobspy_sweep.carry_forward(self.path, 60)]
+        self.assertEqual(got, ["Fresh"], "a 60-day look-back must not widen the carry window")
+
+    def test_a_shorter_look_back_still_wins(self):
+        # The bound is a ceiling, not an override: asking for 2 days means 2 days.
+        self.write([{"company": "Week", "title": "Head of Data", "date_posted": self.days_ago(7)}])
+        self.assertEqual(jobspy_sweep.carry_forward(self.path, 2), [])
+        self.assertEqual(
+            [r["company"] for r in jobspy_sweep.carry_forward(self.path, 14)], ["Week"]
+        )
+
     def test_the_window_is_never_less_than_a_day(self):
         # max_age_days of 0 or None must not silently discard everything.
         self.write([{"company": "Today", "title": "Head of Data", "date_posted": self.days_ago(0)}])

@@ -162,8 +162,20 @@ def run_jobspy(args: argparse.Namespace) -> "list[dict]":
     return alljobs[cols].to_dict("records")
 
 
+# How far back a carried-forward row stays. Deliberately NOT MAX_AGE_DAYS, which is how
+# far back the ATS leg LOOKS - a much longer window, because a board can legitimately
+# surface an older posting the first time it is polled.
+#
+# Reusing it here was a mistake worth naming: leads_raw stopped being "recent leads" and
+# became a rolling two-month archive that re-proposed the same ageing postings every run.
+# One sweep carried 160 rows between 15 and 60 days old. Carry-forward only has to bridge
+# the gap BETWEEN sweeps, and sweeps run every couple of days, so a fortnight covers
+# several intervals with room to spare. Anything older has been seen and passed on.
+CARRY_DAYS = 14
+
+
 def carry_forward(path: str, max_age_days: int | None) -> list[dict]:
-    """Rows from a previous leads_raw that are still inside the recency window.
+    """Rows from a previous leads_raw that are still worth carrying between sweeps.
 
     WHY THIS EXISTS: the ATS-direct leg is a DELTA - it only fetches postings that
     appeared since the last run. That is the right optimization, but the output file
@@ -182,7 +194,9 @@ def carry_forward(path: str, max_age_days: int | None) -> list[dict]:
     """
     if not os.path.exists(path):
         return []
-    cutoff = (datetime.now() - timedelta(days=max(1, max_age_days or 1))).date()
+    # Bounded by CARRY_DAYS even when the caller passes a much longer look-back.
+    days = min(max(1, max_age_days or 1), CARRY_DAYS)
+    cutoff = (datetime.now() - timedelta(days=days)).date()
     kept = []
     try:
         with open(path, newline="", encoding="utf-8") as fh:
