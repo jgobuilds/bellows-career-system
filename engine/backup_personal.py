@@ -310,13 +310,19 @@ def _windows() -> bool:
 
 
 def _onedrive_roots() -> list[tuple[str, bool, str]]:
-    """(path, live, why) for each configured OneDrive folder."""
-    if not _windows():
+    """(path, live, why) for each configured OneDrive folder.
+
+    The guard is `sys.platform`, not the `_windows()` helper right above it, and that
+    is not a style choice. typeshed marks every winreg attribute as existing only when
+    `sys.platform == "win32"`, and mypy narrows on that expression specifically. It
+    cannot narrow on `os.name`, so a check through the helper leaves every winreg call
+    below looking like an attribute error to a type checker running on Linux - which
+    is exactly what CI runs on, and exactly what a Windows developer never sees.
+    """
+    if sys.platform != "win32":
         return []
-    try:
-        import winreg
-    except ImportError:  # pragma: no cover - Windows-only import
-        return []
+    import winreg
+
     out: list[tuple[str, bool, str]] = []
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"SOFTWARE\Microsoft\OneDrive\Accounts") as k:

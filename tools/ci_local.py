@@ -41,6 +41,21 @@ STEPS = [
     # schtasks lookup returned an empty list on Linux, failing two assertions and
     # — worse — making three assertNotIn checks pass vacuously.
     ("Tests (as non-Windows, like CI's runner)", TESTS, True),
+    # The OS gap again, one layer down. The simulation above covers the TESTS but
+    # not the TYPE CHECK, and mypy's answer is platform-dependent too: typeshed
+    # gates every winreg attribute behind `sys.platform == "win32"`, so Windows-mypy
+    # accepts a module a Linux-mypy run rejects outright. That divergence shipped
+    # two red builds while this script reported green, which is worse than no check
+    # because it was believed. `--platform linux` asks mypy the question CI asks.
+    #
+    # It also pins the narrowing idiom: mypy narrows on `sys.platform`, never on
+    # `os.name`, so Windows-only code guarded by an os.name helper fails here and
+    # passes locally.
+    (
+        "Type check (as non-Windows, like CI's runner)",
+        [sys.executable, "-m", "mypy", "--platform", "linux", "engine"],
+        False,
+    ),
 ]
 
 # Binaries that exist on Windows and not on CI's Linux runner. Code that shells
