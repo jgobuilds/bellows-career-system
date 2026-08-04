@@ -38,6 +38,7 @@ from urllib.parse import quote
 import _paths  # noqa: F401  (side-effect: adds repo root to sys.path for `import config`)
 import cadence  # posting-rhythm inference -> when the next sweep is worth running
 import config  # file paths (all under personal/) + the shared dashboard shell in engine/
+import jobkey  # canonical job identity - dedupes swept leads against the board
 import sweep_schedule  # registers the sweep with the OS task scheduler
 import work_auth  # posting work-auth verdicts + the user's own status
 from ats_url import ats_url_for  # company -> ATS careers board
@@ -241,6 +242,60 @@ def jobs_payload():
         # "validate at source" flags on so many rows are asking for.
         j["atsUrl"] = ats_url_for(j.get("co"), companies)
     return d
+
+
+def leads_payload():
+    """The last sweep's triage output, minus anything already on the board.
+
+    WHY THIS ENDPOINT EXISTS: the sweep runs on a schedule and wrote its results to a
+    CSV that nothing in the UI read. A qualifying lead could sit unseen indefinitely,
+    and one did - the only way to discover a sweep had found something was to ask in
+    chat. Automation that produces output nobody sees is worse than no automation,
+    because it also produces the belief that it is being handled.
+
+    Drops rows already in the pipeline so the panel shows what is genuinely NEW; a
+    list that re-proposes decided roles teaches people to stop reading it.
+    """
+    path = getattr(config, "LEADS_SCORED", "")
+    leads: list[dict] = []
+    counts: dict[str, int] = {"Keep": 0, "Watch": 0, "Drop": 0}
+    out: dict = {"leads": leads, "swept": None, "counts": counts}
+    if not path or not os.path.exists(path):
+        return out
+    out["swept"] = datetime.datetime.fromtimestamp(os.path.getmtime(path)).isoformat(
+        timespec="minutes"
+    )
+    # Built once, outside the loop. is_duplicate takes a SET OF KEY TUPLES, not the
+    # job dicts - passing the wrong shape (or the wrong argument order) makes it
+    # silently match nothing, and a dedupe that never dedupes is invisible until the
+    # panel starts re-proposing roles that are already decided.
+    board = jobkey.existing_keys(load_jobs().get("jobs", []))
+    try:
+        with open(path, newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+    except OSError:
+        return out
+    for r in rows:
+        title, co = (r.get("title") or "").strip(), (r.get("company") or "").strip()
+        already = jobkey.is_duplicate(co, title, board)
+        bucket = (r.get("bucket") or "").strip() or "Drop"
+        counts[bucket] = counts.get(bucket, 0) + 1
+        if already or bucket == "Drop":
+            continue
+        leads.append(
+            {
+                "title": title,
+                "company": co,
+                "location": (r.get("location") or "").strip(),
+                "score": int(r.get("score") or 0),
+                "bucket": bucket,
+                "why": (r.get("why") or "").strip(),
+                "posted": (r.get("date_posted") or "").strip(),
+                "url": (r.get("job_url") or "").strip(),
+            }
+        )
+    leads.sort(key=lambda x: -x["score"])
+    return out
 
 
 def hub_status():
@@ -660,6 +715,11 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(200, hub_status())
         if self.path.rstrip("/") == "/api/jobs":
             return self._json(200, jobs_payload())
+        if self.path.rstrip("/") == "/api/leads":
+            try:
+                return self._json(200, leads_payload())
+            except Exception as e:  # never blank the Hub over a malformed CSV
+                return self._json(200, {"leads": [], "swept": None, "error": str(e)})
         if self.path.rstrip("/") == "/api/sweep-cadence":
             return self._json(200, sweep_cadence())
         if self.path.rstrip("/") == "/api/sweep-schedule":

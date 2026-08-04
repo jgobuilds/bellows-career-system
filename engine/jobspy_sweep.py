@@ -51,9 +51,10 @@ through apply-pipeline. (No auto-submit — that's the whole point of the system
 
 import argparse
 import csv
+import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import _paths  # noqa: F401  (side-effect: adds repo root to sys.path for `import config`)
 
@@ -161,6 +162,48 @@ def run_jobspy(args: argparse.Namespace) -> "list[dict]":
     return alljobs[cols].to_dict("records")
 
 
+def carry_forward(path: str, max_age_days: int | None) -> list[dict]:
+    """Rows from a previous leads_raw that are still inside the recency window.
+
+    WHY THIS EXISTS: the ATS-direct leg is a DELTA - it only fetches postings that
+    appeared since the last run. That is the right optimization, but the output file
+    was written in "w" mode from whatever this invocation happened to fetch, so a
+    second run shortly after a first replaced a full result set with a nearly empty
+    one. The delta correctly produced no new rows, and then destroyed the rows the
+    previous run had found.
+
+    That is not hypothetical: a scheduled sweep found 315 postings, a manual re-run
+    two hours later fetched a ~0-day delta, and the file dropped to 106. Nothing
+    looked wrong, because a small sweep result looks exactly like a quiet day.
+
+    leads_raw means "recent leads", not "what this process fetched". So previous rows
+    still inside the window are carried forward and merged, and only genuinely aged
+    rows fall out. A re-run is now additive, which is what the delta always assumed.
+    """
+    if not os.path.exists(path):
+        return []
+    cutoff = (datetime.now() - timedelta(days=max(1, max_age_days or 1))).date()
+    kept = []
+    try:
+        with open(path, newline="", encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                raw = (row.get("date_posted") or "").strip()
+                if not raw:
+                    # No date means it cannot be aged out. Dropping loses a real lead;
+                    # keeping risks accumulation. Keeping wins - the dedupe collapses
+                    # it the moment the row is fetched again.
+                    kept.append(row)
+                    continue
+                try:
+                    if datetime.strptime(raw[:10], "%Y-%m-%d").date() >= cutoff:
+                        kept.append(row)
+                except ValueError:
+                    kept.append(row)
+    except OSError:
+        return []
+    return kept
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="apply-pipeline discovery sweep (ATS-direct + boards)")
     ap.add_argument(
@@ -254,6 +297,13 @@ def main() -> int:
         )
         return 2
 
+    # Carry forward still-recent rows from the previous file, appended AFTER the fresh
+    # ones so the dedupe below keeps THIS run's copy of anything seen twice. The older
+    # row survives only when nothing re-fetched it, which is precisely the case a delta
+    # run would otherwise have silently discarded.
+    fetched_now = len(all_rows)
+    all_rows.extend(carry_forward(args.out, args.max_age_days))
+
     # Merge + dedupe on canonical job identity (prefer first seen — ATS-direct sorts fresh-first).
     seen, merged = set(), []
     for r in all_rows:
@@ -272,6 +322,21 @@ def main() -> int:
         for r in merged:
             w.writerow({c: ("" if r.get(c) is None else r.get(c, "")) for c in CSV_COLS})
 
+    fresh_keys = {
+        jobkey.job_key(str(r.get("company", "")).strip(), str(r.get("title", "")).strip())
+        for r in all_rows[:fetched_now]
+    }
+    n_carried = sum(
+        1
+        for r in merged
+        if jobkey.job_key(str(r.get("company", "")).strip(), str(r.get("title", "")).strip())
+        not in fresh_keys
+    )
+    if n_carried:
+        print(
+            f"  carried forward {n_carried} still-recent posting(s) the previous sweep found",
+            file=sys.stderr,
+        )
     print(
         f"\n{len(merged)} unique postings ({ats_n} ATS-direct + boards) -> {args.out}  "
         f"(swept {datetime.now():%Y-%m-%d %H:%M})",
