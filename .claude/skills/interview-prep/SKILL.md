@@ -13,6 +13,11 @@ until the offer. Where `resume-tailor` builds the document, `interview-prep` bui
 once, reused for every interview), a per-role **prep pack**, and the **follow-up cadence**
 (thank-yous and nudges) that runs from first screen through reference call.
 
+> **Outside material:** if `personal/interview-prep/resources.md` exists, read it. It holds
+> vetted external advice with the house rules already reconciled against it - generic
+> interview coaching often contradicts the honesty rules, and that file records how each
+> conflict resolves rather than leaving it to be re-litigated mid-answer.
+
 > **Where files live (READ THIS):** every user-specific file lives in the gitignored `personal/` folder. The profile is `personal/career-profile.md`; the reusable story bank is `personal/interview-prep/story-bank.md`; per-role prep is `personal/applications/<company>/interview-prep.md`. Read from and write to `personal/` — never the tracked repo.
 
 ## The one rule (same as the whole system)
