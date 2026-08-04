@@ -78,3 +78,43 @@ class TestExistingKeys(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AtsSlugSuffixTest(unittest.TestCase):
+    """A slug and a company name have to resolve to the same identity.
+
+    The ATS-direct sweep has no company name available - it knows only the slug it
+    polled - so a posting arrives as "mariner-careers" while the same company sits on
+    the board as "Mariner". Dedupe compared them, found no match, and re-proposed a
+    role that had already been APPLIED to as a fresh lead.
+
+    The duplicate itself is cheap. What it costs is trust in the list: one that
+    re-surfaces decided roles is one people stop reading, and then a real lead goes by
+    unnoticed too.
+    """
+
+    def test_a_careers_slug_matches_the_company_name(self):
+        self.assertEqual(jobkey.norm_co("mariner-careers"), jobkey.norm_co("Mariner"))
+
+    def test_the_other_common_ats_slug_suffixes(self):
+        for slug, name in (
+            ("acme-jobs", "Acme"),
+            ("acme-hq", "Acme"),
+            ("acmepeople", "Acme"),
+        ):
+            self.assertEqual(jobkey.norm_co(slug), jobkey.norm_co(name), slug)
+
+    def test_a_company_whose_NAME_is_the_suffix_survives(self):
+        # Stripping has a length guard so short names are not eaten. "Careers" as a
+        # company name must stay "careers", not become "".
+        for name in ("Careers", "Jobs", "HQ"):
+            self.assertTrue(jobkey.norm_co(name), name)
+
+    def test_the_suffix_is_only_stripped_at_the_end(self):
+        # CareerBuilder and JobsOhio start with the word; they must be untouched.
+        self.assertEqual(jobkey.norm_co("CareerBuilder"), "careerbuilder")
+        self.assertEqual(jobkey.norm_co("JobsOhio"), "jobsohio")
+        self.assertEqual(jobkey.norm_co("PeopleSoft"), "peoplesoft")
+
+    def test_unrelated_companies_still_do_not_collide(self):
+        self.assertNotEqual(jobkey.norm_co("mariner-careers"), jobkey.norm_co("Marina"))

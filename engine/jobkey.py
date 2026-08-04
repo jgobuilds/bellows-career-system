@@ -30,6 +30,16 @@ _CO_SUFFIXES = (
     "co",
     "corp",
     "company",
+    # ATS-SLUG SUFFIXES. The ATS-direct sweep has no company name to work with - it
+    # only knows the slug it polled - so a posting arrives as "mariner-careers" while
+    # the same company sits on the board as "Mariner". Dedupe compared the two, found
+    # no match, and re-proposed a role that had already been APPLIED to as a fresh
+    # lead. A list that re-surfaces decided roles is one people stop reading, which
+    # costs far more than the duplicate itself.
+    "careers",
+    "jobs",
+    "hq",
+    "people",
 )
 
 
