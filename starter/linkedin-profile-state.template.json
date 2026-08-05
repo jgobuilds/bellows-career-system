@@ -1,0 +1,48 @@
+{
+  "_README": [
+    "WHAT THIS IS: a record of what your LinkedIn profile CURRENTLY shows. Not what you",
+    "want it to show, and not what the optimizer told you to paste - what is live on the",
+    "page right now.",
+    "",
+    "WHY IT EXISTS: LinkedIn does two jobs in a search and both fail silently. It",
+    "generates the inbound - a profile that does not say what you now do is invisible to",
+    "the recruiters searching for exactly that, and nothing ever tells you about the leads",
+    "you did not get. And it is where your resume gets verified: a recruiter with your",
+    "resume open will pull up your profile, and any disagreement about employer, title or",
+    "dates reads as a discrepancy rather than a stale page.",
+    "",
+    "So `python engine/linkedin_check.py` compares this against a resume before you send",
+    "it, and build_application.py runs the same check automatically.",
+    "",
+    "WHY IT IS HAND-MAINTAINED: LinkedIn has no read API for your own profile worth",
+    "relying on, and scraping is against their terms. So this is updated by the person who",
+    "just changed the profile. That is weaker than reading the live page and far stronger",
+    "than assuming - a dated claim can at least go stale out loud.",
+    "",
+    "HOW TO USE IT: open your profile, copy what each role actually says, set as_of to",
+    "today, and set confirmed true. Only employer, title and dates are compared - bullet",
+    "wording is SUPPOSED to differ between the two, so it is not checked."
+  ],
+
+  "as_of": "",
+  "confirmed": false,
+  "headline": "",
+  "url": "",
+
+  "experience": [
+    {
+      "company": "Company name exactly as your profile shows it",
+      "title": "Title exactly as your profile shows it",
+      "dates": "Month YYYY - Month YYYY, or Month YYYY - Present"
+    }
+  ],
+
+  "aliases": {},
+  "_aliases_note": [
+    "Deliberate naming differences between resume and profile, so they are declared once",
+    "instead of warned about on every build. Example: a resume that says 'Self-Employed'",
+    "where the profile names your LLC. Format is {\"resume name\": \"profile name\"}.",
+    "Use this ONLY for a choice you made on purpose - if the two genuinely disagree, that",
+    "is the drift this file exists to catch, and hiding it here defeats the point."
+  ]
+}

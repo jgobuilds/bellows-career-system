@@ -298,6 +298,11 @@ def leads_payload():
     return out
 
 
+# Statuses that mean "decided against", mirroring the hub's own SKIPPED set. A role
+# here is off the live board but still counted in the lifetime total.
+SKIPPED = frozenset({"not applying", "skip", "skipped", "drop", "dropped", "pass", "no", "parked"})
+
+
 def hub_status():
     import time
 
@@ -316,6 +321,13 @@ def hub_status():
         "artifact_dates": dates,  # {key: "YYYY-MM-DD"} last-modified, for nudges + timestamps
         "pipeline": {
             "total": len(jobs),
+            # `total` counts every row ever triaged, most of which are decided-out. The
+            # board chip used it beside four columns that show only LIVE roles, so it read
+            # "103 on board" above 32 visible cards - a number nobody could reconcile, and
+            # the kind of discrepancy that makes people distrust the rest of the display.
+            # `live` is what those columns actually add up to; `passed` is the remainder.
+            "live": sum(1 for j in jobs if (j.get("status") or "").strip().lower() not in SKIPPED),
+            "passed": sum(1 for j in jobs if (j.get("status") or "").strip().lower() in SKIPPED),
             "applied": sum(1 for j in jobs if (j.get("status") or "") in SUBMITTED),
             "interviewing": sum(1 for j in jobs if (j.get("status") or "") == "interviewing"),
         },

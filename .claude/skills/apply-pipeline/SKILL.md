@@ -18,6 +18,34 @@ Part of the career system:
 - **career-coach** → its "jobs to watch" reshapes what discovery targets.
 - **apply-pipeline** (this) → finds leads, decides IF/HOW to apply, drafts the approach, tracks it.
 
+## Before ANY application goes out: LinkedIn
+
+**Foundational, not optional. It comes before a résumé counts as finished.**
+
+```bash
+python engine/linkedin_check.py personal/applications/<name>
+```
+
+LinkedIn does two jobs in a search and **both fail silently**:
+
+1. **It generates the leads.** A profile that does not say what the user does now is
+   invisible to the recruiters searching for exactly that. Nothing ever reports the
+   inbound that did not arrive, so this failure has no symptom at all.
+2. **It is where the résumé gets verified.** A recruiter with the résumé open pulls up the
+   profile. Any disagreement on employer, title or dates reads as a *discrepancy*, not as
+   a stale page - in the one document set where credibility is the entire product.
+
+So a résumé is not done until the profile it will be checked against agrees with it.
+`build_application.py` runs this automatically and prints what to fix. **Treat a warning
+as blocking**: fix the profile, update `personal/linkedin/profile-state.json` to match,
+then send.
+
+Only employer, title and dates are compared. Bullet wording is *supposed* to differ - the
+two are different registers - so it is deliberately not checked.
+
+If the profile needs rewriting rather than syncing, that is `linkedin-optimizer`'s job.
+Route there, then come back.
+
 ## The three hard boundaries (never cross, even if asked)
 1. **No auto-submit, ever.** This skill drafts and prepares. The user opens the posting and submits. Not a default — a rule. It exists because unsupervised submission attaches the user's name to applications they never read, trips bot-detection, and auto-answers screening/EEO/work-authorization questions that carry legal and reputational weight (acute at defense/regulated employers).
 2. **The quality bar is not bypassed for volume.** Every tailoring draft runs the fabrication check from resume-tailor's de-ai-checklist: metrics must trace to personal/career-profile.md, no scale overreach, no inflated scope. A lighter *review surface* for volume roles is fine; skipping the *check* is not.

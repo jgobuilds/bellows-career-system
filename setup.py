@@ -40,6 +40,9 @@ COPIES = {
     "resume-style-rules.template.md": "resume-style-rules.md",
     "pipeline.template.md": os.path.join("data", "pipeline.md"),
     "leads.template.md": os.path.join("data", "leads.md"),
+    # The gate that runs before every application: what LinkedIn currently says, so
+    # the resume can be checked against the page it will be verified against.
+    "linkedin-profile-state.template.json": os.path.join("linkedin", "profile-state.json"),
 }
 # files to seed empty (so the local server + board work on day one)
 SEED = {
@@ -119,7 +122,12 @@ def install_hooks():
 def main():
     created, skipped, missing = [], [], []
 
-    for d in (PERSONAL, os.path.join(PERSONAL, "data"), os.path.join(PERSONAL, "applications")):
+    for d in (
+        PERSONAL,
+        os.path.join(PERSONAL, "data"),
+        os.path.join(PERSONAL, "applications"),
+        os.path.join(PERSONAL, "linkedin"),
+    ):
         os.makedirs(d, exist_ok=True)
 
     for tmpl, dest_rel in COPIES.items():

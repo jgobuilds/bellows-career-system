@@ -877,7 +877,11 @@ function weeklyDue(){
 }
 function tabBadge(ph){
   if(ph.key==='weekly'){ const w=weeklyDue(); return {text: w.due?'due':'✓', cls: w.due?'cnt-due':'cnt-done'}; }
-  if(ph.key==='search'){ return {text:((STATUS.pipeline&&STATUS.pipeline.total)||0)+' on board', cls:''}; }
+  if(ph.key==='search'){ const p=STATUS.pipeline||{};
+    // Count what the columns below actually show. The old chip used the lifetime
+    // total, so it read '103 on board' above 32 cards and looked like a bug.
+    const live=(p.live!=null)?p.live:(p.total||0), passed=p.passed||0;
+    return {text: live+' live'+(passed?(' · '+passed+' passed'):''), cls:''}; }
   const {artTotal,artDone,complete}=phaseInfo(ph);
   if(artTotal===0) return null;
   return {text:artDone+'/'+artTotal, cls: complete?'cnt-done':''};

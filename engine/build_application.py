@@ -142,6 +142,32 @@ def main():
             print("   ⚠", w)
     if not any_built:
         sys.exit(f"no resume.json or cover.json found in {folder}")
+
+    # LinkedIn is checked HERE, at the moment a résumé exists and before anyone sends it.
+    # It does two jobs that both fail silently: it generates the inbound (a profile that
+    # does not say what you now do is invisible to the recruiters searching for it, and
+    # nothing tells you about the leads you did not get), and it is where this document
+    # gets verified. A recruiter reading the résumé will open the profile, and any
+    # disagreement on employer, title or dates reads as a discrepancy rather than a stale
+    # page. So the résumé is not finished until the profile it will be checked against
+    # agrees with it.
+    try:
+        import linkedin_check
+
+        resume_spec = None
+        rj = os.path.join(folder, "resume.json")
+        if os.path.exists(rj):
+            with open(rj, encoding="utf-8") as fh:
+                resume_spec = json.load(fh)
+        li = linkedin_check.check(resume_spec)
+        if li:
+            print("\n⚠ LinkedIn — fix before you apply:")
+            for w in li:
+                print("   ⚠", w)
+            print("   Run `python engine/linkedin_check.py` for the detail.")
+    except Exception as e:  # never block a build over the profile check
+        print(f"\n(LinkedIn check skipped: {e})")
+
     print("\nDone. Review both files, then submit yourself — nothing is auto-submitted.")
 
 
