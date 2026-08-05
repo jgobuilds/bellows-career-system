@@ -60,8 +60,20 @@ def _render_pdf(docx_path, pdf_path):
         doc.Close(False)
         return pages
     except Exception as e:
-        print(f"   ! PDF render failed ({e}); is the file open in Word?")
-        return None
+        # FALL BACK RATHER THAN GIVE UP. In-process COM is the fast path, not the only
+        # one, and it fails for reasons that have nothing to do with the document: a
+        # wedged Word server answers "Call was rejected by callee", and a half-resolved
+        # type library answers "Open.SaveAs2" - both while a fresh out-of-process Word
+        # renders the same file without complaint.
+        #
+        # This fallback already existed and was reachable ONLY on ImportError, so it
+        # could not help in the one situation it was written for. An optimisation that
+        # fails should degrade to the working path, not to no PDF at all.
+        print(f"   ! in-process render failed ({e}); retrying via a fresh Word process")
+        pages = _render_pdf_powershell(docx_path, pdf_path)
+        if pages is None:
+            print("   ! PDF still not rendered; is the file open in Word?")
+        return pages
     finally:
         if word is not None:
             word.Quit()
