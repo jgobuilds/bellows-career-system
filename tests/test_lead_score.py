@@ -364,51 +364,79 @@ class AiAnchorsTheLaneTest(unittest.TestCase):
         )
 
 
-class RemoteFirstSignalTest(unittest.TestCase):
-    """The remote-first bonus (added 2026-08-06).
+class WorkModelPreferenceTest(unittest.TestCase):
+    """The work-model preference (2026-08-06).
 
-    'Remote' describes one posting; 'remote-first' describes whether the policy
-    survives a change of CEO. The bonus exists to separate them, and it is
-    deliberately weak: gated on the role ALREADY being remote, folded into the
-    raw total so the lane cap still bounds it, and never a gate of its own.
+    WHERE you can work and HOW you want to work are different questions. `geo`
+    answers the first; this answers the second. The preference RANKS what you
+    see and never removes anything — every table row is >= 0, so a role you
+    would have wanted cannot be filtered out by preferring a different model.
 
-    Config-derived rather than hard-coded, because CI scaffolds the template
-    config (empty company list) and a real user config has a filled-in one.
+    Config-derived, because CI scaffolds the template config (empty company
+    list) while a real user config has a filled-in one.
     """
 
-    def _text_term(self):
-        terms = getattr(CFG, "REMOTE_FIRST_TEXT", None) or []
-        return terms[0] if terms else None
+    def _a_remote_first_company(self):
+        return (getattr(CFG, "REMOTE_FIRST_COMPANIES", None) or [None])[0]
 
-    def test_remote_first_text_adds_the_bonus(self):
-        term = self._text_term()
-        if not term:
-            self.skipTest("no REMOTE_FIRST_TEXT configured")
-        plain = lead_score.score_row(TITLE, "Remote")[0]
-        first = lead_score.score_row(TITLE, f"Remote ({term})")[0]
-        self.assertGreaterEqual(first, plain, "remote-first must never score BELOW plain remote")
-        if plain < 10:  # only observable when the lane cap has not already bound it
-            self.assertGreater(first, plain, "remote-first should beat plain remote")
+    # -- classification: describes the POSTING, never your eligibility ----------
 
-    def test_onsite_at_a_remote_first_company_gets_nothing(self):
-        """The bonus rewards the ROLE being remote, not the employer's brand."""
-        cos = getattr(CFG, "REMOTE_FIRST_COMPANIES", None) or []
-        if not cos:
+    def test_remote_first_beats_remote_as_a_label(self):
+        co = self._a_remote_first_company()
+        if not co:
             self.skipTest("no REMOTE_FIRST_COMPANIES configured")
-        _, _, why = lead_score.score_row(TITLE, "San Francisco, CA", cos[0])
-        self.assertNotIn("remote-first", why)
+        self.assertEqual(lead_score.work_model("Remote", co), "remote_first")
+        self.assertEqual(lead_score.work_model("Remote", "Some Other Co"), "remote")
 
-    def test_offshore_still_excluded_at_a_remote_first_company(self):
-        """GEO_EXCLUDE outranks the bonus — 'remote' is only as good as its country."""
-        cos = getattr(CFG, "REMOTE_FIRST_COMPANIES", None) or []
+    def test_hybrid_and_onsite_are_distinguished(self):
+        self.assertEqual(lead_score.work_model("Hartford, CT (Hybrid)"), "hybrid")
+        self.assertEqual(lead_score.work_model("Hartford, CT"), "onsite")
+        self.assertEqual(lead_score.work_model(""), "unknown")
+
+    def test_an_excluded_remote_role_is_still_labelled_remote(self):
+        """It IS a remote job — it is just not available to you.
+
+        Calling it "onsite" to express that misdescribed the posting AND hid the
+        real reason it was rejected. Geography says no on its own.
+        """
         excluded = _excluded_place()
-        if not cos or not excluded:
-            self.skipTest("needs both a remote-first company and an excluded place")
-        _, _, why = lead_score.score_row(TITLE, f"Remote - {excluded}", cos[0])
-        self.assertNotIn("remote-first", why)
+        if not excluded:
+            self.skipTest("no GEO_EXCLUDE configured")
+        self.assertIn(lead_score.work_model(f"Remote - {excluded}"), ("remote", "remote_first"))
+
+    # -- ranking: zero floor, and geography still outranks it ------------------
+
+    def test_an_excluded_place_scores_zero_however_good_the_model(self):
+        co = self._a_remote_first_company()
+        excluded = _excluded_place()
+        if not co or not excluded:
+            self.skipTest("needs a remote-first company and an excluded place")
+        self.assertEqual(lead_score.work_model_rank(f"Remote - {excluded}", co), 0)
+
+    def test_no_preference_ever_scores_below_zero(self):
+        """The property that makes this safe: it ranks, it cannot subtract."""
+        for pref, table in lead_score.WORK_MODEL_POINTS.items():
+            for model, pts in table.items():
+                self.assertGreaterEqual(pts, 0, f"{pref}/{model} would penalise, not rank")
+
+    def test_every_preference_fully_rewards_its_own_model(self):
+        for pref, table in lead_score.WORK_MODEL_POINTS.items():
+            key = pref.replace(" ", "_") if pref != "in office" else "onsite"
+            key = {"remote_first": "remote_first", "in_office": "onsite"}.get(key, key)
+            self.assertEqual(table[key], 2, f"'{pref}' should fully reward its own model")
+
+    def test_remote_first_preference_still_surfaces_plain_remote(self):
+        """'Look for both, prioritise the first' — remote must score, but score lower."""
+        table = lead_score.WORK_MODEL_POINTS["remote first"]
+        self.assertGreater(table["remote"], 0, "plain remote must still be surfaced")
+        self.assertGreater(table["remote_first"], table["remote"], "remote-first must rank higher")
+
+    def test_an_unknown_preference_falls_back_rather_than_disabling(self):
+        self.assertIn(lead_score._WM_PREF, lead_score.WORK_MODEL_POINTS)
 
     def test_company_argument_is_optional(self):
         """score_row(title, location) must keep working — ats_sweep calls it that way."""
-        two = lead_score.score_row(TITLE, "Remote")
-        three = lead_score.score_row(TITLE, "Remote", None)
-        self.assertEqual(two, three)
+        self.assertEqual(
+            lead_score.score_row(TITLE, "Remote"),
+            lead_score.score_row(TITLE, "Remote", None),
+        )

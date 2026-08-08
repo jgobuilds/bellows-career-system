@@ -121,11 +121,75 @@ GEO_REMOTE = CFG.terms_to_regex(_remote_terms)
 # the country qualifying it. Empty by default, so existing configs are unaffected.
 GEO_EXCLUDE = CFG.terms_to_regex(getattr(CFG, "GEO_EXCLUDE", []))
 DOMAIN = CFG.terms_to_regex(CFG.DOMAIN_BONUS)
-# Remote-FIRST is a company property, not a place, so it is deliberately kept out
-# of the GEO lists: "remote" describes this posting, "remote-first" describes
-# whether the policy will survive a change of CEO.
+# WORK MODEL — the arrangement, which is a different question from the place.
+# `geo` above answers "could you physically do this job"; this answers "do you
+# want it this way". Conflating them is how "Hybrid-San Francisco Office" once
+# scored as commutable, so they stay separate on purpose.
+#
+# Remote-first is its own model rather than a flavour of remote: "remote"
+# describes this posting, "remote-first" describes whether the arrangement
+# survives a change of leadership.
 REMOTE_FIRST_TEXT = CFG.terms_to_regex(getattr(CFG, "REMOTE_FIRST_TEXT", []))
 REMOTE_FIRST_CO = CFG.terms_to_regex(getattr(CFG, "REMOTE_FIRST_COMPANIES", []))
+HYBRID_TEXT = CFG.terms_to_regex(["hybrid", "flex office", "flexible office"])
+
+# How well each model satisfies each preference, 0-2. Read a row as "if this is
+# what you want, here is what each posting is worth to you."
+#
+# Two properties worth keeping when editing: every preference gives its own model
+# the full 2, and no preference scores anything BELOW zero. This ranks what you
+# see, it never removes a posting — a hybrid seat in your home range keeps its
+# full geo score under a remote preference, it just does not collect points on
+# top. Nothing here can drop a role you would have wanted.
+WORK_MODEL_POINTS = {
+    "in office": {"onsite": 2, "hybrid": 1, "remote": 0, "remote_first": 0},
+    "hybrid": {"onsite": 1, "hybrid": 2, "remote": 1, "remote_first": 1},
+    "remote": {"onsite": 0, "hybrid": 1, "remote": 2, "remote_first": 2},
+    # "look for both, prioritise the first": remote still counts, remote-first counts double.
+    "remote first": {"onsite": 0, "hybrid": 0, "remote": 1, "remote_first": 2},
+}
+_WM_PREF = str(getattr(CFG, "WORK_MODEL_PREFERENCE", "remote") or "remote").strip().lower()
+if _WM_PREF not in WORK_MODEL_POINTS:  # a typo must not silently disable the signal
+    _WM_PREF = "remote"
+
+
+def work_model(location, company=None):
+    """Classify the ARRANGEMENT a posting offers, independent of where it is.
+
+    Deliberately says nothing about whether YOU can take it — "Remote - India"
+    is genuinely a remote job, it is just not available to someone who will not
+    relocate. Labelling it "onsite" to express that was wrong twice over: it
+    misdescribes the posting, and it hides the reason it was really rejected.
+    Geography is scored separately and says no on its own.
+
+    Order matters: remote-first is tested before remote, because every
+    remote-first posting is also a remote one and the specific answer is the
+    useful one.
+    """
+    loc = location or ""
+    if GEO_REMOTE.search(loc):
+        if REMOTE_FIRST_CO.search(company or "") or REMOTE_FIRST_TEXT.search(loc):
+            return "remote_first"
+        return "remote"
+    if HYBRID_TEXT.search(loc):
+        return "hybrid"
+    return "onsite" if loc.strip() else "unknown"
+
+
+def work_model_rank(location, company=None):
+    """Preference points for a posting, 0-2. Zero wherever the place is excluded.
+
+    Used both as a score component and as the SECONDARY SORT KEY, which is the
+    half that actually delivers "prioritise remote-first". A strong in-lane role
+    saturates the lane cap at 10 whether it is remote or remote-first, so the
+    score alone cannot express the ordering the preference asks for.
+    """
+    loc = location or ""
+    if GEO_EXCLUDE.search(loc):
+        return 0
+    return WORK_MODEL_POINTS[_WM_PREF].get(work_model(loc, company), 0)
+
+
 HARD_GATE = CFG.terms_to_regex(CFG.HARD_GATES)
 NOISE = CFG.terms_to_regex(CFG.NOISE)
 OFF_CONTEXT = CFG.terms_to_regex(CFG.OFF_CONTEXT)
@@ -382,19 +446,18 @@ def score_row(title, location, company=None):
     if dom:
         reasons.append("insurance/fintech domain")
 
-    # Remote-first (0-1) — bonus only, and gated on the role ALREADY being remote.
-    # A remote-first company advertising an onsite seat gets nothing: the point is
-    # to separate "remote because they mean it" from "remote-eligible for now", not
-    # to reward the employer's brand. Folded into raw so the lane cap still bounds
-    # it, which is what stops it carrying an off-lane posting.
-    rf = 0
-    if (
-        is_remote
-        and not excluded
-        and (REMOTE_FIRST_CO.search(company or "") or REMOTE_FIRST_TEXT.search(loc))
-    ):
-        rf = 1
-        reasons.append("remote-first company (verify — RTO reversals are common)")
+    # Work-model preference (0-2) — how well the ARRANGEMENT matches what you want.
+    # Folded into raw so the lane cap still bounds it: wanting remote must never
+    # carry an off-lane posting.
+    wm = work_model(loc, company)
+    rf = work_model_rank(loc, company)
+    if wm != "unknown":
+        note = f"work model: {wm.replace('_', '-')}"
+        if rf:
+            note += f" (+{rf}, you prefer '{_WM_PREF}')"
+        if wm == "remote_first":
+            note += " — verify, RTO reversals are common"
+        reasons.append(note)
 
     raw = lane + lvl + geo + dom + rf  # 0-11 before the ceilings
     score = cap_total(raw, lane, lvl)
@@ -451,6 +514,7 @@ def score_file(in_csv=None, out_csv=None, pipeline_md=None):
                 "title": title,
                 "company": company,
                 "location": location,
+                "work_model": work_model(location, company).replace("_", "-"),
                 "date_posted": (r.get("date_posted") or "")[:10],
                 "why": why + ("; already in pipeline" if tracked else ""),
                 "job_url": (r.get("job_url") or "").strip(),
@@ -461,7 +525,13 @@ def score_file(in_csv=None, out_csv=None, pipeline_md=None):
             }
         )
 
-    scored.sort(key=lambda x: (-x["score"], x["company"]))
+    # Preference is the TIE-BREAK, not just a score component: a strong in-lane
+    # role hits the lane cap at 10 whether it is remote or remote-first, so without
+    # this the "prioritise remote-first" half of the preference would be invisible
+    # exactly among the roles worth ranking.
+    scored.sort(
+        key=lambda x: (-x["score"], -work_model_rank(x["location"], x["company"]), x["company"])
+    )
     with open(out_csv, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(
             fh,
@@ -471,6 +541,7 @@ def score_file(in_csv=None, out_csv=None, pipeline_md=None):
                 "title",
                 "company",
                 "location",
+                "work_model",
                 "date_posted",
                 "why",
                 "job_url",

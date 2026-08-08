@@ -124,11 +124,18 @@ LEVEL_BELOW = ["senior manager", "sr manager", "principal", "lead"]
 # =============================================================================
 DOMAIN_BONUS = ["your", "strongest", "industries"]
 
-# Remote-FIRST is not the same as remote-eligible. "Remote" on a posting often
-# means remote-until-we-change-our-minds; remote-first means the company is built
-# that way. Scored as a +1 tie-breaker and ONLY when the role is already remote,
-# so it can never rescue an onsite seat, and the lane cap still bounds the total.
-# Leave either list empty to switch the signal off.
+# WORK MODEL PREFERENCE — which arrangement you want. One of:
+#   "in office" | "hybrid" | "remote" | "remote first"
+# This RANKS what you see, it never filters. Where you can physically work is
+# already handled by the GEO_* lists above; this is the separate question of how
+# you want to work, and every value scores >= 0 so it cannot drop a role.
+# "remote first" surfaces BOTH remote and remote-first roles, ranking
+# remote-first higher — those companies are built that way, so the arrangement
+# is far less likely to be reversed later.
+WORK_MODEL_PREFERENCE = "remote"
+
+# The vocabulary that identifies a remote-FIRST employer, as opposed to one that
+# is merely remote-eligible for now. Leave either list empty to switch it off.
 REMOTE_FIRST_TEXT = [
     "remote-first",
     "remote first",
