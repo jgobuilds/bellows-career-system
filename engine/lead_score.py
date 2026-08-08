@@ -121,6 +121,11 @@ GEO_REMOTE = CFG.terms_to_regex(_remote_terms)
 # the country qualifying it. Empty by default, so existing configs are unaffected.
 GEO_EXCLUDE = CFG.terms_to_regex(getattr(CFG, "GEO_EXCLUDE", []))
 DOMAIN = CFG.terms_to_regex(CFG.DOMAIN_BONUS)
+# Remote-FIRST is a company property, not a place, so it is deliberately kept out
+# of the GEO lists: "remote" describes this posting, "remote-first" describes
+# whether the policy will survive a change of CEO.
+REMOTE_FIRST_TEXT = CFG.terms_to_regex(getattr(CFG, "REMOTE_FIRST_TEXT", []))
+REMOTE_FIRST_CO = CFG.terms_to_regex(getattr(CFG, "REMOTE_FIRST_COMPANIES", []))
 HARD_GATE = CFG.terms_to_regex(CFG.HARD_GATES)
 NOISE = CFG.terms_to_regex(CFG.NOISE)
 OFF_CONTEXT = CFG.terms_to_regex(CFG.OFF_CONTEXT)
@@ -283,7 +288,7 @@ def cap_total(raw, lane, lvl):
 OFF_CONTEXT_EXEMPT = list(PENALTY_LANES.values())
 
 
-def score_row(title, location):
+def score_row(title, location, company=None):
     """Triage a posting from its TITLE and LOCATION only.
 
     NOTE: this never sees the JD body, so HARD_GATES can only catch what's in the
@@ -377,7 +382,21 @@ def score_row(title, location):
     if dom:
         reasons.append("insurance/fintech domain")
 
-    raw = lane + lvl + geo + dom  # 0-10 before the ceilings
+    # Remote-first (0-1) — bonus only, and gated on the role ALREADY being remote.
+    # A remote-first company advertising an onsite seat gets nothing: the point is
+    # to separate "remote because they mean it" from "remote-eligible for now", not
+    # to reward the employer's brand. Folded into raw so the lane cap still bounds
+    # it, which is what stops it carrying an off-lane posting.
+    rf = 0
+    if (
+        is_remote
+        and not excluded
+        and (REMOTE_FIRST_CO.search(company or "") or REMOTE_FIRST_TEXT.search(loc))
+    ):
+        rf = 1
+        reasons.append("remote-first company (verify — RTO reversals are common)")
+
+    raw = lane + lvl + geo + dom + rf  # 0-11 before the ceilings
     score = cap_total(raw, lane, lvl)
     if score < raw:
         reasons.append(f"capped {raw}->{score} (lane fit and level bound the total)")
@@ -421,7 +440,7 @@ def score_file(in_csv=None, out_csv=None, pipeline_md=None):
         title = (r.get("title") or "").strip()
         company = (r.get("company") or "").strip()
         location = (r.get("location") or "").strip()
-        s, bucket, why = score_row(title, location)
+        s, bucket, why = score_row(title, location, company)
         if s == 0:
             continue  # drop noise / no-lane entirely
         tracked = jobkey.is_duplicate(company, title, seen)

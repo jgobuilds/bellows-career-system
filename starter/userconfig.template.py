@@ -124,6 +124,23 @@ LEVEL_BELOW = ["senior manager", "sr manager", "principal", "lead"]
 # =============================================================================
 DOMAIN_BONUS = ["your", "strongest", "industries"]
 
+# Remote-FIRST is not the same as remote-eligible. "Remote" on a posting often
+# means remote-until-we-change-our-minds; remote-first means the company is built
+# that way. Scored as a +1 tie-breaker and ONLY when the role is already remote,
+# so it can never rescue an onsite seat, and the lane cap still bounds the total.
+# Leave either list empty to switch the signal off.
+REMOTE_FIRST_TEXT = [
+    "remote-first",
+    "remote first",
+    "fully remote",
+    "100% remote",
+    "all-remote",
+    "distributed team",
+    "work from anywhere",
+]
+REMOTE_FIRST_COMPANIES = []  # e.g. ["gitlab", "automattic", "zapier"]
+
+
 # =============================================================================
 # 7. HARD GATES -> always Drop.  Write these HONESTLY: a gate you'd be lying to
 #    clear saves you an application. Match how titles are actually written.

@@ -362,3 +362,53 @@ class AiAnchorsTheLaneTest(unittest.TestCase):
                 "director of artificial intelligence enablement", "enablement"
             )
         )
+
+
+class RemoteFirstSignalTest(unittest.TestCase):
+    """The remote-first bonus (added 2026-08-06).
+
+    'Remote' describes one posting; 'remote-first' describes whether the policy
+    survives a change of CEO. The bonus exists to separate them, and it is
+    deliberately weak: gated on the role ALREADY being remote, folded into the
+    raw total so the lane cap still bounds it, and never a gate of its own.
+
+    Config-derived rather than hard-coded, because CI scaffolds the template
+    config (empty company list) and a real user config has a filled-in one.
+    """
+
+    def _text_term(self):
+        terms = getattr(CFG, "REMOTE_FIRST_TEXT", None) or []
+        return terms[0] if terms else None
+
+    def test_remote_first_text_adds_the_bonus(self):
+        term = self._text_term()
+        if not term:
+            self.skipTest("no REMOTE_FIRST_TEXT configured")
+        plain = lead_score.score_row(TITLE, "Remote")[0]
+        first = lead_score.score_row(TITLE, f"Remote ({term})")[0]
+        self.assertGreaterEqual(first, plain, "remote-first must never score BELOW plain remote")
+        if plain < 10:  # only observable when the lane cap has not already bound it
+            self.assertGreater(first, plain, "remote-first should beat plain remote")
+
+    def test_onsite_at_a_remote_first_company_gets_nothing(self):
+        """The bonus rewards the ROLE being remote, not the employer's brand."""
+        cos = getattr(CFG, "REMOTE_FIRST_COMPANIES", None) or []
+        if not cos:
+            self.skipTest("no REMOTE_FIRST_COMPANIES configured")
+        _, _, why = lead_score.score_row(TITLE, "San Francisco, CA", cos[0])
+        self.assertNotIn("remote-first", why)
+
+    def test_offshore_still_excluded_at_a_remote_first_company(self):
+        """GEO_EXCLUDE outranks the bonus — 'remote' is only as good as its country."""
+        cos = getattr(CFG, "REMOTE_FIRST_COMPANIES", None) or []
+        excluded = _excluded_place()
+        if not cos or not excluded:
+            self.skipTest("needs both a remote-first company and an excluded place")
+        _, _, why = lead_score.score_row(TITLE, f"Remote - {excluded}", cos[0])
+        self.assertNotIn("remote-first", why)
+
+    def test_company_argument_is_optional(self):
+        """score_row(title, location) must keep working — ats_sweep calls it that way."""
+        two = lead_score.score_row(TITLE, "Remote")
+        three = lead_score.score_row(TITLE, "Remote", None)
+        self.assertEqual(two, three)
