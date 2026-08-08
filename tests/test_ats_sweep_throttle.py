@@ -337,3 +337,42 @@ class WorkdayLocationFallbackTest(unittest.TestCase):
     def test_an_unusable_path_yields_empty_rather_than_a_wrong_guess(self):
         for path in ("", "/details/Foo_1", None):
             self.assertEqual(ats_sweep._workday_location({}, path), "")
+
+
+class FreshnessUsesTheRefreshDateTest(unittest.TestCase):
+    """A posting refreshed yesterday is live, however long ago it first appeared.
+
+    Regression test for a silent filter bug: both the Greenhouse and Ashby
+    fetchers aged a posting by its ORIGINAL publish date, so a 60-day window
+    dropped roles that were still actively recruited. It hit senior and exec
+    searches hardest, because those run for months — and it was invisible,
+    since what it removed never reached the output.
+    """
+
+    OLD = "2026-04-17T14:19:03-04:00"
+    NEW = "2026-08-03T16:43:10-04:00"
+
+    def test_picks_the_more_recent_date(self):
+        self.assertEqual(ats_sweep._freshest(self.OLD, self.NEW), self.NEW)
+
+    def test_order_of_arguments_does_not_matter(self):
+        self.assertEqual(
+            ats_sweep._freshest(self.OLD, self.NEW),
+            ats_sweep._freshest(self.NEW, self.OLD),
+        )
+
+    def test_survives_missing_and_unparseable_values(self):
+        self.assertEqual(ats_sweep._freshest(None, self.NEW), self.NEW)
+        self.assertEqual(ats_sweep._freshest(self.NEW, None), self.NEW)
+        self.assertIsNone(ats_sweep._freshest(None, None))
+        # An unparseable value must never shadow a good one.
+        self.assertEqual(ats_sweep._freshest("not-a-date", self.NEW), self.NEW)
+
+    def test_a_long_running_search_is_no_longer_aged_out(self):
+        """The exact GitLab case: 110 days since first published, 2 since refresh."""
+        chosen = ats_sweep._freshest(self.OLD, self.NEW)
+        self.assertLess(
+            ats_sweep._iso_age_days(chosen),
+            ats_sweep._iso_age_days(self.OLD),
+            "ageing by first-published is what dropped live senior roles",
+        )
