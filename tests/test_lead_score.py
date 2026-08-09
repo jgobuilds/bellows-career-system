@@ -420,10 +420,35 @@ class WorkModelPreferenceTest(unittest.TestCase):
                 self.assertGreaterEqual(pts, 0, f"{pref}/{model} would penalise, not rank")
 
     def test_every_preference_fully_rewards_its_own_model(self):
+        """Asking for a thing and being given it is full marks."""
+        own = {
+            "in office": "onsite",
+            "hybrid": "hybrid",
+            "remote": "remote",
+            "remote first": "remote_first",
+        }
         for pref, table in lead_score.WORK_MODEL_POINTS.items():
-            key = pref.replace(" ", "_") if pref != "in office" else "onsite"
-            key = {"remote_first": "remote_first", "in_office": "onsite"}.get(key, key)
-            self.assertEqual(table[key], 2, f"'{pref}' should fully reward its own model")
+            self.assertGreaterEqual(
+                table[own[pref]], 2, f"'{pref}' should fully reward its own model"
+            )
+
+    def test_remote_first_is_never_worth_less_than_remote(self):
+        """It is not a different arrangement — it is a sturdier form of the same one.
+
+        So there is no preference under which plain remote should be the better
+        outcome, and this is the one model allowed to outscore a preference's own.
+        """
+        for pref, table in lead_score.WORK_MODEL_POINTS.items():
+            self.assertGreaterEqual(
+                table["remote_first"],
+                table["remote"],
+                f"'{pref}' ranks plain remote above remote-first",
+            )
+
+    def test_a_remote_preference_ranks_remote_first_above_plain_remote(self):
+        """You asked for remote and got a version less likely to be reversed."""
+        table = lead_score.WORK_MODEL_POINTS["remote"]
+        self.assertGreater(table["remote_first"], table["remote"])
 
     def test_remote_first_preference_still_surfaces_plain_remote(self):
         """'Look for both, prioritise the first' — remote must score, but score lower."""

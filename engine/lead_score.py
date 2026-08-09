@@ -133,20 +133,30 @@ REMOTE_FIRST_TEXT = CFG.terms_to_regex(getattr(CFG, "REMOTE_FIRST_TEXT", []))
 REMOTE_FIRST_CO = CFG.terms_to_regex(getattr(CFG, "REMOTE_FIRST_COMPANIES", []))
 HYBRID_TEXT = CFG.terms_to_regex(["hybrid", "flex office", "flexible office"])
 
-# How well each model satisfies each preference, 0-2. Read a row as "if this is
+# How well each model satisfies each preference, 0-3. Read a row as "if this is
 # what you want, here is what each posting is worth to you."
 #
-# Two properties worth keeping when editing: every preference gives its own model
-# the full 2, and no preference scores anything BELOW zero. This ranks what you
-# see, it never removes a posting — a hybrid seat in your home range keeps its
-# full geo score under a remote preference, it just does not collect points on
-# top. Nothing here can drop a role you would have wanted.
+# Three properties to keep when editing, all asserted in the tests:
+#
+#  1. Nothing is below zero. This RANKS what you see, it never removes a posting
+#     — a hybrid seat in your home range keeps its full geo score under a remote
+#     preference, it just collects no preference points on top.
+#  2. Every preference scores its own model at least 2: asking for a thing and
+#     being given it is full marks.
+#  3. remote_first >= remote in EVERY row, because remote-first is not a
+#     different arrangement from remote, it is a strictly stronger form of it —
+#     the same job with an arrangement less likely to be reversed later. That is
+#     why it is the one model allowed to outscore the preference's own: under a
+#     plain "remote" preference, a remote-first posting gives you everything you
+#     asked for and something more, so it ranks above (3), not merely equal.
 WORK_MODEL_POINTS = {
     "in office": {"onsite": 2, "hybrid": 1, "remote": 0, "remote_first": 0},
     "hybrid": {"onsite": 1, "hybrid": 2, "remote": 1, "remote_first": 1},
-    "remote": {"onsite": 0, "hybrid": 1, "remote": 2, "remote_first": 2},
-    # "look for both, prioritise the first": remote still counts, remote-first counts double.
-    "remote first": {"onsite": 0, "hybrid": 0, "remote": 1, "remote_first": 2},
+    # remote-first outranks remote here too — you asked for remote and got a
+    # sturdier version of it.
+    "remote": {"onsite": 0, "hybrid": 1, "remote": 2, "remote_first": 3},
+    # "look for both, prioritise the first": plain remote still surfaces, lower.
+    "remote first": {"onsite": 0, "hybrid": 0, "remote": 1, "remote_first": 3},
 }
 _WM_PREF = str(getattr(CFG, "WORK_MODEL_PREFERENCE", "remote") or "remote").strip().lower()
 if _WM_PREF not in WORK_MODEL_POINTS:  # a typo must not silently disable the signal

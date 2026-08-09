@@ -168,9 +168,9 @@ DOMAIN_BONUS = [
 # This RANKS what you see, it never filters. Where you can physically work is
 # already handled by the GEO_* lists above; this is the separate question of how
 # you want to work, and every value scores >= 0 so it cannot drop a role.
-# "remote first" surfaces BOTH remote and remote-first roles, ranking
-# remote-first higher — those companies are built that way, so the arrangement
-# is far less likely to be reversed later.
+# Remote-first is a stronger form of remote, not a different arrangement, so it
+# outranks plain remote under EITHER remote setting. The difference is what
+# else surfaces: "remote" still rates hybrid, "remote first" does not.
 WORK_MODEL_PREFERENCE = "remote"
 
 # The vocabulary that identifies a remote-FIRST employer, as opposed to one that
