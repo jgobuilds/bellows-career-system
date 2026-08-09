@@ -364,9 +364,9 @@ def _freshest(*dates):
 
     Both Greenhouse and Ashby expose an original publish date and a refresh date,
     and both fetchers used to prefer the ORIGINAL. That silently dropped live
-    postings: GitLab's VP, Data & Insights was first published 110 days before it
-    was found and refreshed 2 days before, so a 60-day window aged it out while it
-    was actively being recruited for.
+    postings. A real VP-level opening was first published 110 days before it was
+    found and refreshed 2 days before, so a 60-day window aged it out while it was
+    actively being recruited for.
 
     This matters most for exactly the roles worth having. Senior and executive
     searches routinely run three to six months, so ranking by first-published

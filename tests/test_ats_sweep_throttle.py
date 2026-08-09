@@ -369,7 +369,7 @@ class FreshnessUsesTheRefreshDateTest(unittest.TestCase):
         self.assertEqual(ats_sweep._freshest("not-a-date", self.NEW), self.NEW)
 
     def test_a_long_running_search_is_no_longer_aged_out(self):
-        """The exact GitLab case: 110 days since first published, 2 since refresh."""
+        """The case that exposed it: 110 days since first published, 2 since refresh."""
         chosen = ats_sweep._freshest(self.OLD, self.NEW)
         self.assertLess(
             ats_sweep._iso_age_days(chosen),

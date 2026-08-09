@@ -389,8 +389,8 @@ class WorkModelPreferenceTest(unittest.TestCase):
         self.assertEqual(lead_score.work_model("Remote", "Some Other Co"), "remote")
 
     def test_hybrid_and_onsite_are_distinguished(self):
-        self.assertEqual(lead_score.work_model("Hartford, CT (Hybrid)"), "hybrid")
-        self.assertEqual(lead_score.work_model("Hartford, CT"), "onsite")
+        self.assertEqual(lead_score.work_model("Someplace, ZZ (Hybrid)"), "hybrid")
+        self.assertEqual(lead_score.work_model("Someplace, ZZ"), "onsite")
         self.assertEqual(lead_score.work_model(""), "unknown")
 
     def test_an_excluded_remote_role_is_still_labelled_remote(self):
