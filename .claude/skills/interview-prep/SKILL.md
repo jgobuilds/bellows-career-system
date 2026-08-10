@@ -18,7 +18,7 @@ once, reused for every interview), a per-role **prep pack**, and the **follow-up
 > interview coaching often contradicts the honesty rules, and that file records how each
 > conflict resolves rather than leaving it to be re-litigated mid-answer.
 
-> **Where files live (READ THIS):** every user-specific file lives in the gitignored `personal/` folder. The profile is `personal/career-profile.md`; the reusable story bank is `personal/interview-prep/story-bank.md`; per-role prep is `personal/applications/<company>/interview-prep.md`. Read from and write to `personal/` — never the tracked repo.
+> **Where files live (READ THIS):** every user-specific file lives in the gitignored `personal/` folder. The profile is `personal/career-profile.md`; the reusable story bank is `personal/interview-prep/story-bank.md`; per-role prep is `personal/applications/<company>/interview-prep.md` (the durable pack) plus one short `<YYYY-MM-DD>-<round>-<names>.md` per interview beside it. Read from and write to `personal/` — never the tracked repo.
 
 ## The one rule (same as the whole system)
 **Every story traces to something real in `personal/career-profile.md`.** No invented
@@ -63,8 +63,40 @@ role-specific/technical topics, leadership/scope questions, domain knowledge, an
 every interview asks. Note the interview *type* and stakes (recruiter screen vs.
 hiring-manager vs. panel vs. exec). Method in `references/mock-drill.md`.
 
-### 3 — Build the per-role prep pack
-Write `personal/applications/<company>/interview-prep.md`:
+### 3 — Build the prep pack: ONE durable file, plus ONE SHORT FILE PER ROUND
+
+**Two kinds of file, and the split is the point.**
+
+`personal/applications/<company>/interview-prep.md` is the **durable pack** — comp, the story
+map, logistics, the honest gaps, and the reasoning behind each call. It survives the whole
+loop and is where a fact is recorded once.
+
+`personal/applications/<company>/<YYYY-MM-DD>-<round>-<names>.md` is a **short page per
+interview**, carrying only what is live for that day and **linking back to the durable pack**
+rather than restating it. Name it date-first so rounds sort chronologically and say who was in
+them: `2026-08-10-panel-narla-kaminsky.md`.
+
+Keep an index table at the top of the durable pack listing every round and its file.
+
+**Why this is a rule.** A single growing file is corrected in place as the picture changes —
+an interviewer turns out to be a skip-level rather than a peer, two separate conversations turn
+out to be one panel — and the corrections land at the BOTTOM while the stale version stays at
+the top. It then reads plausibly from the first line and describes an interview that is not
+happening. That is worse than no prep, because it is confidently wrong in exactly the places
+the research already corrected. A real pack reached 366 lines and three layers of contradiction
+before the split was made.
+
+Two habits that keep it honest:
+- **Mark superseded sections where they sit**, with a pointer to what replaced them. Do not
+  delete the reasoning; date it and say what overtook it.
+- **Never duplicate a fact across the two.** If it is in the durable pack, the round page links
+  to it. Two copies disagree the moment one is updated.
+
+Each round page should be a three-minute read: who is in the room and what they actually own,
+the one structural idea for that conversation, the probe most likely to decide it, two or three
+stories in priority order, questions to ask, and the hard landmines.
+
+**The durable pack contains:**
 - **Likely questions** for this role (behavioral + role-specific + classics).
 - **Story map** — which story-bank entry answers each question (reuse; don't rewrite).
 - **Gaps** — questions with no strong story; prep an honest answer or a candid "haven't done X, here's the closest / how I'd approach it."
