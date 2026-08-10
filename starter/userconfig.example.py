@@ -162,6 +162,30 @@ DOMAIN_BONUS = [
     "platform",
 ]
 
+
+# WORK MODEL PREFERENCE — which arrangement you want. One of:
+#   "in office" | "hybrid" | "remote" | "remote first"
+# This RANKS what you see, it never filters. Where you can physically work is
+# already handled by the GEO_* lists above; this is the separate question of how
+# you want to work, and every value scores >= 0 so it cannot drop a role.
+# Remote-first is a stronger form of remote, not a different arrangement, so it
+# outranks plain remote under EITHER remote setting. The difference is what
+# else surfaces: "remote" still rates hybrid, "remote first" does not.
+WORK_MODEL_PREFERENCE = "remote"
+
+# The vocabulary that identifies a remote-FIRST employer, as opposed to one that
+# is merely remote-eligible for now. Leave either list empty to switch it off.
+REMOTE_FIRST_TEXT = [
+    "remote-first",
+    "remote first",
+    "fully remote",
+    "100% remote",
+    "all-remote",
+    "distributed team",
+    "work from anywhere",
+]
+REMOTE_FIRST_COMPANIES = []  # e.g. ["gitlab", "automattic", "zapier"]
+
 # =============================================================================
 # 7. HARD GATES -> always Drop.  From the profile's own "what you are NOT".
 # =============================================================================

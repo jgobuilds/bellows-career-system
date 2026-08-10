@@ -362,3 +362,106 @@ class AiAnchorsTheLaneTest(unittest.TestCase):
                 "director of artificial intelligence enablement", "enablement"
             )
         )
+
+
+class WorkModelPreferenceTest(unittest.TestCase):
+    """The work-model preference (2026-08-06).
+
+    WHERE you can work and HOW you want to work are different questions. `geo`
+    answers the first; this answers the second. The preference RANKS what you
+    see and never removes anything — every table row is >= 0, so a role you
+    would have wanted cannot be filtered out by preferring a different model.
+
+    Config-derived, because CI scaffolds the template config (empty company
+    list) while a real user config has a filled-in one.
+    """
+
+    def _a_remote_first_company(self):
+        return (getattr(CFG, "REMOTE_FIRST_COMPANIES", None) or [None])[0]
+
+    # -- classification: describes the POSTING, never your eligibility ----------
+
+    def test_remote_first_beats_remote_as_a_label(self):
+        co = self._a_remote_first_company()
+        if not co:
+            self.skipTest("no REMOTE_FIRST_COMPANIES configured")
+        self.assertEqual(lead_score.work_model("Remote", co), "remote_first")
+        self.assertEqual(lead_score.work_model("Remote", "Some Other Co"), "remote")
+
+    def test_hybrid_and_onsite_are_distinguished(self):
+        self.assertEqual(lead_score.work_model("Someplace, ZZ (Hybrid)"), "hybrid")
+        self.assertEqual(lead_score.work_model("Someplace, ZZ"), "onsite")
+        self.assertEqual(lead_score.work_model(""), "unknown")
+
+    def test_an_excluded_remote_role_is_still_labelled_remote(self):
+        """It IS a remote job — it is just not available to you.
+
+        Calling it "onsite" to express that misdescribed the posting AND hid the
+        real reason it was rejected. Geography says no on its own.
+        """
+        excluded = _excluded_place()
+        if not excluded:
+            self.skipTest("no GEO_EXCLUDE configured")
+        self.assertIn(lead_score.work_model(f"Remote - {excluded}"), ("remote", "remote_first"))
+
+    # -- ranking: zero floor, and geography still outranks it ------------------
+
+    def test_an_excluded_place_scores_zero_however_good_the_model(self):
+        co = self._a_remote_first_company()
+        excluded = _excluded_place()
+        if not co or not excluded:
+            self.skipTest("needs a remote-first company and an excluded place")
+        self.assertEqual(lead_score.work_model_rank(f"Remote - {excluded}", co), 0)
+
+    def test_no_preference_ever_scores_below_zero(self):
+        """The property that makes this safe: it ranks, it cannot subtract."""
+        for pref, table in lead_score.WORK_MODEL_POINTS.items():
+            for model, pts in table.items():
+                self.assertGreaterEqual(pts, 0, f"{pref}/{model} would penalise, not rank")
+
+    def test_every_preference_fully_rewards_its_own_model(self):
+        """Asking for a thing and being given it is full marks."""
+        own = {
+            "in office": "onsite",
+            "hybrid": "hybrid",
+            "remote": "remote",
+            "remote first": "remote_first",
+        }
+        for pref, table in lead_score.WORK_MODEL_POINTS.items():
+            self.assertGreaterEqual(
+                table[own[pref]], 2, f"'{pref}' should fully reward its own model"
+            )
+
+    def test_remote_first_is_never_worth_less_than_remote(self):
+        """It is not a different arrangement — it is a sturdier form of the same one.
+
+        So there is no preference under which plain remote should be the better
+        outcome, and this is the one model allowed to outscore a preference's own.
+        """
+        for pref, table in lead_score.WORK_MODEL_POINTS.items():
+            self.assertGreaterEqual(
+                table["remote_first"],
+                table["remote"],
+                f"'{pref}' ranks plain remote above remote-first",
+            )
+
+    def test_a_remote_preference_ranks_remote_first_above_plain_remote(self):
+        """You asked for remote and got a version less likely to be reversed."""
+        table = lead_score.WORK_MODEL_POINTS["remote"]
+        self.assertGreater(table["remote_first"], table["remote"])
+
+    def test_remote_first_preference_still_surfaces_plain_remote(self):
+        """'Look for both, prioritise the first' — remote must score, but score lower."""
+        table = lead_score.WORK_MODEL_POINTS["remote first"]
+        self.assertGreater(table["remote"], 0, "plain remote must still be surfaced")
+        self.assertGreater(table["remote_first"], table["remote"], "remote-first must rank higher")
+
+    def test_an_unknown_preference_falls_back_rather_than_disabling(self):
+        self.assertIn(lead_score._WM_PREF, lead_score.WORK_MODEL_POINTS)
+
+    def test_company_argument_is_optional(self):
+        """score_row(title, location) must keep working — ats_sweep calls it that way."""
+        self.assertEqual(
+            lead_score.score_row(TITLE, "Remote"),
+            lead_score.score_row(TITLE, "Remote", None),
+        )

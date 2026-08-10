@@ -359,6 +359,32 @@ def _workday_age_days(posted_on):
     return None
 
 
+def _freshest(*dates):
+    """The most RECENT of several date fields, for freshness tests.
+
+    Both Greenhouse and Ashby expose an original publish date and a refresh date,
+    and both fetchers used to prefer the ORIGINAL. That silently dropped live
+    postings. A real VP-level opening was first published 110 days before it was
+    found and refreshed 2 days before, so a 60-day window aged it out while it was
+    actively being recruited for.
+
+    This matters most for exactly the roles worth having. Senior and executive
+    searches routinely run three to six months, so ranking by first-published
+    filters the target band hardest — the bug was invisible because what it
+    removed never appeared in the output to be noticed.
+    """
+    best, best_age = None, None
+    for d in dates:
+        if not d:
+            continue
+        age = _iso_age_days(d)
+        if age is None:
+            continue
+        if best_age is None or age < best_age:
+            best, best_age = d, age
+    return best or next((d for d in dates if d), None)
+
+
 def _date_str_from_age(iso_or_none):
     if not iso_or_none:
         return ""
@@ -375,7 +401,7 @@ def fetch_greenhouse(c):
     rows = []
     for job in j.get("jobs", []):
         loc = ((job.get("location") or {}).get("name") or "").strip()
-        date = job.get("first_published") or job.get("updated_at")
+        date = _freshest(job.get("first_published"), job.get("updated_at"))
         rows.append(
             {
                 "company": job.get("company_name") or c["slug"],
@@ -428,7 +454,7 @@ def fetch_ashby(c):
     rows = []
     for job in j.get("jobs", []):
         loc = (job.get("location") or "").strip()
-        date = job.get("publishedDate") or job.get("updatedAt") or job.get("publishedAt")
+        date = _freshest(job.get("publishedDate"), job.get("updatedAt"), job.get("publishedAt"))
         rows.append(
             {
                 "company": c["slug"],
