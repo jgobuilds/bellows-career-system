@@ -31,9 +31,16 @@ class TestScanPlaceholders(unittest.TestCase):
 
 class TestResumeValidate(unittest.TestCase):
     def _spec(self, title, loc):
+        # The bullet is not incidental: a role with none now warns in its own right,
+        # so an empty-bulleted fixture could no longer represent a CLEAN spec.
         return {
             "experience": [
-                {"company": "Acme", "title": title, "location_dates": loc, "bullets": []}
+                {
+                    "company": "Acme",
+                    "title": title,
+                    "location_dates": loc,
+                    "bullets": [["Owned a thing", " that mattered."]],
+                }
             ]
         }
 
@@ -385,3 +392,125 @@ class TestEarlierFoldedIntoExperience(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEveryRoleCarriesALine(unittest.TestCase):
+    """A role listed with only a title and dates gives a reader nothing and an ATS
+    nothing to match on — the tenure it was added to prove is all it contributes.
+
+    The validator WARNS rather than filling the gap: the line has to come from the
+    profile, and a builder that invented one would be fabricating.
+    """
+
+    def _spec(self, **over):
+        spec = {
+            "name": "A Candidate",
+            "contact": "Somewhere, ZZ | a@example.com",
+            "level": "executive",
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                    "bullets": [["Did a thing", " that mattered."]],
+                }
+            ],
+        }
+        spec.update(over)
+        return spec
+
+    def _bare_role_warnings(self, spec):
+        return [w for w in resume_builder.validate(spec) if "no content line" in w]
+
+    def test_a_role_with_bullets_is_fine(self):
+        self.assertEqual(self._bare_role_warnings(self._spec()), [])
+
+    def test_a_role_with_no_bullets_warns(self):
+        spec = self._spec()
+        spec["experience"][0]["bullets"] = []
+        self.assertEqual(len(self._bare_role_warnings(spec)), 1)
+
+    def test_a_stacked_sub_role_with_no_bullets_warns_and_names_the_employer(self):
+        """Sub-roles carry no company of their own — the warning must still say who."""
+        spec = self._spec(
+            experience=[
+                {
+                    "company": "Acme",
+                    "roles": [
+                        {
+                            "title": "Director of Data",
+                            "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                            "bullets": [["Did a thing", " that mattered."]],
+                        },
+                        {
+                            "title": "Data Engineer",
+                            "location_dates": "Somewhere, ZZ | June 2013 – May 2019",
+                            "bullets": [],
+                        },
+                    ],
+                }
+            ]
+        )
+        warns = self._bare_role_warnings(spec)
+        self.assertEqual(len(warns), 1)
+        self.assertIn("Acme", warns[0])
+        self.assertNotIn("?", warns[0])
+
+    def test_an_earlier_entry_counts_its_singular_bullet(self):
+        """`earlier` uses a `bullet` string, not a `bullets` list. Both must count."""
+        spec = self._spec(
+            earlier=[
+                {
+                    "company": "Old Co",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | 2008 – 2012",
+                    "bullet": "Automated the reporting set.",
+                }
+            ]
+        )
+        self.assertEqual(self._bare_role_warnings(spec), [])
+
+    def test_an_earlier_entry_with_no_bullet_warns(self):
+        spec = self._spec(
+            earlier=[
+                {
+                    "company": "Old Co",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | 2008 – 2012",
+                }
+            ]
+        )
+        self.assertEqual(len(self._bare_role_warnings(spec)), 1)
+
+    def test_an_empty_bullet_string_does_not_count(self):
+        spec = self._spec(
+            earlier=[
+                {
+                    "company": "Old Co",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | 2008 – 2012",
+                    "bullet": "   ",
+                }
+            ]
+        )
+        self.assertEqual(len(self._bare_role_warnings(spec)), 1)
+
+    def test_validation_does_not_mutate_the_spec(self):
+        """_all_roles fills company onto COPIES; a synthetic key must never reach
+        the spec, where it could be rendered into the document."""
+        spec = self._spec(
+            experience=[
+                {
+                    "company": "Acme",
+                    "roles": [
+                        {
+                            "title": "Data Engineer",
+                            "location_dates": "Somewhere, ZZ | 2013 – 2019",
+                            "bullets": [],
+                        }
+                    ],
+                }
+            ]
+        )
+        resume_builder.validate(spec)
+        self.assertNotIn("company", spec["experience"][0]["roles"][0])
