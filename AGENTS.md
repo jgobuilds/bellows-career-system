@@ -52,6 +52,12 @@ Everyday commands, dev setup, and the commit-msg gate are all in
 
 ## Working here
 
+- **The profile is the product; the sweep is optional.** `career-profile.md` is what makes
+  every downstream artifact honest, and it is the reason to use this at all. Lead discovery
+  is a convenience layer over a finite list of company boards — it cannot see companies the
+  user has not added, ATSes with no public feed, or roles filled before posting. Most strong
+  leads still arrive by hand. Never imply the sweep is the point, and never let a proposal
+  make it a prerequisite for anything.
 - **Quality over volume** is the product thesis, not a preference. A generic
   application to a role the user scores 5 for is worse than none — it costs them
   the company. Proposals that trade honesty or selectivity for throughput are
