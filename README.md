@@ -52,8 +52,9 @@ you're a 5 for is worse than no application, because it costs you the company.
 2. **What you want, and why** — self-assessment and a 3-to-10-year roadmap anchored to the
    *why*, not just the next title. A plan up a ladder you don't want is a failure, however
    logical.
-3. **Sourcing that matches that** — sweep company ATS feeds directly (not aggregators) for
-   roles genuinely in your lane, then score each one honestly, out loud, gaps included.
+3. **Roles judged against that** — paste in anything you find, and optionally let the lead
+   sweep poll company ATS feeds directly (not aggregators) for roles in your lane. Either
+   way each one gets scored honestly, out loud, gaps included.
 4. **Depth on the few that survive** — tailor from one source of truth, route senior roles
    through a warm intro first, and prep the interview properly.
 
@@ -78,9 +79,18 @@ headcount, budget, real numbers, and the lanes you should *skip* — then writes
 of the search.
 
 **Jobs reach the scoring step by two separate paths, and neither gets special treatment.**
-The lead sweep polls company ATS feeds directly on a schedule you set, and anything you
-find yourself is pasted straight in. Both land in the same scorer and get the same
-unflattering 1–10.
+Anything you find yourself is pasted straight in, and the lead sweep — which is entirely
+optional — polls company ATS feeds directly on a schedule you set. Both land in the same
+scorer and get the same unflattering 1–10.
+
+**Keep searching on your own. The sweep is a convenience, not the product.** It polls a
+finite list of company boards, so it cannot see roles at companies you have not added,
+roles on an ATS with no public feed (Workday, iCIMS and bespoke portals are common), or
+roles that are filled before they are ever posted. In real use the majority of strong
+leads still arrive the old way — a posting someone sends you, a company you thought of, a
+search you ran yourself — and pasting one in takes seconds. **Bellows earns its keep on
+what it does with a role, not on finding it.** You can run the whole system and never
+sweep once.
 
 **That file is then the only thing anything is generated from.** Every bullet, metric,
 title, and skill in a résumé must trace back to it. The tailoring step matches a job
@@ -330,13 +340,22 @@ The rest of this section is the manual (Claude Desktop) path.
    `personal/career-profile.md`. Then `voice-profile` builds `personal/writing-style.md` from real samples of
    your writing. Every résumé, letter, and message is generated *from* these.
 
-4. **First sweep, then open the Hub.**
-   ```
-   python engine/jobspy_sweep.py          # ATS-direct + boards -> personal/data/leads_*.csv
-   ```
-   Tell Claude *"leads have been updated, process them,"* then launch the **Career Hub** with `bellows.bat`
+4. **Open the Hub, and give it a role.** Launch the **Career Hub** with `bellows.bat`
    (Windows) or `./bellows.sh` (Mac/Linux) — it runs the local server and opens `engine/hub.html`, your
    command center with progress, launchers, coach voice, and the full pipeline.
+
+   The fastest way to see whether Bellows is any good is to paste in a job you already
+   care about: *"score this job: [URL]."* No setup beyond the profile, and you get the
+   honest 1–10 with its reasoning.
+
+   **Optionally**, let it go looking as well:
+   ```
+   python engine/jobspy_sweep.py          # OPTIONAL: ATS-direct + boards -> personal/data/leads_*.csv
+   ```
+   Then tell Claude *"leads have been updated, process them."* Configure `COMPANIES` in
+   `personal/userconfig.py` first, or it has nowhere to look. **Skipping this entirely is a
+   perfectly normal way to use Bellows** — keep running your own searches and paste in what
+   you find.
 
 Read the `*.example.*` files in [`starter/`](starter/) first — the whole system filled in for a fictional
 person (Johnny Fakeuser), including a role it says to *skip*. Seeing "good" takes five minutes and saves an hour
