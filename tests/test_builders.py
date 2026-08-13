@@ -514,3 +514,58 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
         )
         resume_builder.validate(spec)
         self.assertNotIn("company", spec["experience"][0]["roles"][0])
+
+
+class TestBulletContinuationReadsAsOneSentence(unittest.TestCase):
+    """The bold lead-in and the rest are ONE sentence, so the continuation opens with
+    a space or a comma.
+
+    A colon, semicolon or dash turns the lead-in into a label with an explanation
+    hanging off it. Both shapes are defensible in isolation; mixing them inside one
+    document is visible to a reader before they have read a word of the content, which
+    is what this catches.
+
+    Measured before being enforced: across a real portfolio the sentence shape was
+    already overwhelmingly dominant, so the outliers were drift rather than a competing
+    house style.
+    """
+
+    def _spec(self, rest):
+        return {
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                    "bullets": [["Did a thing", rest]],
+                }
+            ]
+        }
+
+    def _warnings(self, rest):
+        return [
+            w for w in resume_builder.validate(self._spec(rest)) if "continuation starts with" in w
+        ]
+
+    def test_space_and_comma_are_the_house_shape(self):
+        self.assertEqual(self._warnings(" that mattered."), [])
+        self.assertEqual(self._warnings(", which mattered."), [])
+
+    def test_colon_warns(self):
+        self.assertEqual(len(self._warnings(": an elaboration follows.")), 1)
+
+    def test_semicolon_warns(self):
+        self.assertEqual(len(self._warnings("; an elaboration follows.")), 1)
+
+    def test_spaced_dash_warns(self):
+        for dash in (" - ", " – ", " — "):
+            self.assertEqual(len(self._warnings(f"{dash}an aside follows.")), 1, dash)
+
+    def test_a_hyphenated_word_is_not_a_separator(self):
+        """Only a dash FOLLOWED BY A SPACE separates; 'end-to-end' must not trip it."""
+        self.assertEqual(self._warnings(" end-to-end ownership of the platform."), [])
+
+    def test_the_message_names_the_bullet_and_the_fix(self):
+        w = self._warnings(": an elaboration follows.")[0]
+        self.assertIn("Did a thing", w)
+        self.assertIn("Rewrite", w)

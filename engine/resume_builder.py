@@ -142,6 +142,9 @@ TRACKED_TOOLS = (
 
 _TITLE_BAD = re.compile(r"[,/]| - ")  # comma, slash, or spaced hyphen truncates titles
 _LOC_OK = re.compile(r"^.+,\s*[A-Z]{2}\s*\|\s*.+$")  # "City, ST | dates"
+# A bullet continuation that opens with a colon, semicolon or dash. Space and comma
+# are the house shape and are deliberately absent from this class.
+_BULLET_SEP = re.compile(r"^\s*([:;]|[-–—]\s)")
 
 _MONTHS = {
     m: i
@@ -403,6 +406,26 @@ def validate(spec):
         ld = role.get("location_dates", "")
         if not _LOC_OK.match(ld):
             warns.append(f"location/date line is not 'City, ST | dates': {ld!r}")
+        # The bold lead-in and the rest are ONE SENTENCE, so the continuation starts
+        # with a space or a comma. A colon, semicolon or dash turns the lead-in into a
+        # label with an explanation hanging off it, and mixing the two shapes inside one
+        # document is visible to a reader before they have read a word of the content.
+        #
+        # Measured before being enforced rather than asserted: across a real portfolio the
+        # sentence shape was already overwhelmingly dominant, so the outliers were drift
+        # rather than a competing house style. This pins what was already true.
+        #
+        # WARNS RATHER THAN REWRITING, for the same reason as the missing-line rule:
+        # deleting a colon leaves ungrammatical text ("...how it moves a stewardship
+        # model..."), so the fix is to rewrite the sentence, which is authorial work.
+        for lead, rest in role.get("bullets", []) or []:
+            sep = _BULLET_SEP.match(str(rest))
+            if sep:
+                warns.append(
+                    f"bullet continuation starts with {sep.group(1)!r} — the lead-in and the "
+                    f"rest are one sentence, so it should read on with a space or a comma. "
+                    f"Rewrite rather than deleting the punctuation: {str(lead)[:44]!r}"
+                )
         # Every role should carry at least one line. A bare title-and-dates entry
         # reads as filler to a human and gives an ATS nothing to match on, so the
         # tenure it was added to prove is the only thing it contributes.
