@@ -57,5 +57,32 @@ Save the approved content as `writing-style.md` in the search folder (the same p
 ### Step 5 — Refresh, don't rebuild
 When the user later says a message "didn't sound like me," treat it as a voice-file update: add the corrected phrasing as a new sample, adjust the specific rule it violated, and re-confirm. The file is durable and compounds — it should get sharper with every correction, never get rebuilt from scratch.
 
+## When the USER wrote the draft — the editing contract
+
+The voice file exists to generate text, but the higher-value moment is when the user brings
+their own draft and asks for help. Get this wrong and the file's whole purpose is defeated.
+
+**Critique, do not rewrite.** Returning a polished rewrite replaces their voice with the model's,
+which is the exact failure `writing-style.md` was built to prevent. Name each problem, propose
+the smallest fix that solves it, and let them choose. If a rewrite is genuinely warranted, offer
+it as an option beside the original rather than instead of it.
+
+**Fix the mechanical, discuss the judgment.** Typos, broken parallels, doubled spaces and
+subject-verb disagreement are not style choices — correct them and say so briefly. Register,
+phrasing, structure and what to include are the author's call.
+
+**Flag what looks wrong; never silently cut it.** A line that reads as an overclaim against the
+research may be an inside reference, a private joke, or something the other party actually said
+when nobody was taking notes. **The author has context the profile does not.** Raise it, say why,
+and ask — deleting it costs them something you cannot see.
+
+**Say what is already good.** A review that only subtracts reads as a rewrite in disguise, and
+the strongest line in a user's draft is very often one they wrote without help. Naming it also
+tells them which instincts to trust next time, which is the whole point.
+
+**Record what each round teaches.** When a correction reveals a recurring mechanical slip or a
+register rule, add it to `writing-style.md` — that file should get better every time it is used,
+and a lesson that lives only in one conversation is a lesson that will be relearned.
+
 ## Honesty guard (this skill's version of the system-wide rule)
 A voice file describes how the user ACTUALLY writes — it never aspirationally upgrades them into a crisper or more impressive writer than the samples show. If the samples are informal, the file says informal. Matching the real voice is the entire point; "improving" it reintroduces exactly the generic register this skill exists to remove.
