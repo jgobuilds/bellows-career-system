@@ -52,7 +52,12 @@ def norm_co(s: str | None) -> str:
 
 
 def norm_title(s: str | None) -> str:
-    return re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    # "&" and "and" are the same word, and postings use them interchangeably -
+    # a board lists "Data Governance & Compliance" while the same role gets typed
+    # into the pipeline as "Data Governance and Compliance". Stripping punctuation
+    # without folding the conjunction first made those two different jobs, so every
+    # ampersand title in the pipeline re-surfaced as a fresh lead on every sweep.
+    return re.sub(r"[^a-z0-9]", "", re.sub(r"&", " and ", (s or "").lower()))
 
 
 def job_key(co: str | None, title: str | None) -> tuple[str, str]:
