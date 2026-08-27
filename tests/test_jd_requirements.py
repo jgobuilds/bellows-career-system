@@ -136,3 +136,30 @@ class TestDedupe(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCapabilityRollup(unittest.TestCase):
+    """A named tool is usually a plus, not a hard requirement — the capability is
+    what transfers. Scoring the tool list literally overstated a gap AND imported
+    an honesty rule into a relevance score, where it does not belong."""
+
+    def test_a_tool_maps_to_its_capability(self):
+        self.assertIn("orchestration", jr.capabilities_of("airflow"))
+        self.assertIn("streaming", jr.capabilities_of("kafka"))
+
+    def test_a_tool_can_belong_to_TWO_capabilities(self):
+        """BigQuery is a warehouse AND distributed compute. A one-to-one reverse
+        map kept only whichever was declared last, so BigQuery silently stopped
+        counting as a warehouse — wrong in a way nothing else would surface."""
+        caps = jr.capabilities_of("bigquery")
+        self.assertIn("warehouse", caps)
+        self.assertIn("distributed compute", caps)
+
+    def test_an_unclassified_tool_returns_empty(self):
+        self.assertEqual(jr.capabilities_of("notarealtool"), [])
+
+    def test_streaming_has_no_bridge_from_batch_tools(self):
+        """Micro-batch is not streaming, and the map must not quietly imply it.
+        dbt and Fivetran evidence transformation and ingestion, never streaming."""
+        for tool in ("dbt", "fivetran", "airflow", "bigquery", "snowflake"):
+            self.assertNotIn("streaming", jr.capabilities_of(tool), tool)

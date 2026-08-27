@@ -450,7 +450,6 @@ def report(spec_path: str, jd_text: str, top: int = 6) -> int:
     reqs = [r for r in jd_requirements.requirements(jd_text) if r["kind"] == "demonstrable"]
     disp = [r for r in jd_requirements.requirements(jd_text) if r["kind"] == "disposition"]
     techs = jd_requirements.technologies(jd_text)
-    spec_text = tokens(json.dumps(spec))
 
     for r in reqs:
         r["tokens"] = tokens(r["text"])
@@ -480,22 +479,39 @@ def report(spec_path: str, jd_text: str, top: int = 6) -> int:
     print(f"   target band {TARGET_LOW:.0%}–{TARGET_HIGH:.0%}. Gaps are normal and fine to show;")
     print("   a document answering everything reads as stretched, not as strong.\n")
 
-    # Technologies are the one place an exact match is the whole game.
-    missing_tech = [
-        t
-        for t in techs
-        if t.replace(" ", "") not in "".join(sorted(spec_text))
-        and not any(t in b["text"].lower() for b in bullets)
-        and t not in " ".join(spec_text)
-    ]
-    have = [t for t in techs if t not in missing_tech]
-    if techs:
-        print(f"NAMED TECHNOLOGIES   {len(have)}/{len(techs)}")
-        print(f"   on the resume : {', '.join(have) if have else '(none)'}")
-        print(f"   NOT on it     : {', '.join(missing_tech) if missing_tech else '(none)'}")
-        if missing_tech:
-            print("   ⛔ A named tool you have not used is a REAL gap. Never reach for a")
-            print("      near-neighbour to cover one — that trade costs more than the keyword.")
+    # CAPABILITY, not tool inventory. A named tool is usually a plus rather than a
+    # hard requirement — orchestration transfers between schedulers, and a posting
+    # naming Dagster is really asking whether you have orchestrated anything. So a
+    # missing tool inside a capability that IS evidenced is adjacent and learnable;
+    # a capability with nothing behind it is the gap worth showing.
+    spec_low = json.dumps(spec).lower()
+    on_resume = {
+        t for t in techs if re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", spec_low)
+    }
+    by_cap: dict[str, dict] = {}
+    for t in techs:
+        for cap in jd_requirements.capabilities_of(t) or ["other"]:
+            slot = by_cap.setdefault(cap, {"have": [], "missing": []})
+            slot["have" if t in on_resume else "missing"].append(t)
+
+    if by_cap:
+        covered_caps = [c for c, v in by_cap.items() if v["have"]]
+        print(f"CAPABILITIES ASKED FOR   {len(covered_caps)}/{len(by_cap)} evidenced")
+        for cap, v in sorted(by_cap.items(), key=lambda kv: (not kv[1]["have"], kv[0])):
+            if v["have"]:
+                extra = (
+                    f"   · adjacent, not on the résumé: {', '.join(v['missing'])}"
+                    if v["missing"]
+                    else ""
+                )
+                print(f"   ✓ {cap:<24} {', '.join(v['have'])}{extra}")
+            else:
+                print(f"   ✗ {cap:<24} nothing evidenced — {', '.join(v['missing'])}")
+        if any(not v["have"] for v in by_cap.values()):
+            print("\n   ✗ is a real capability gap and fine to show. An adjacent tool is a")
+            print("     plus, not a blocker — the capability transfers, the syntax is weeks.")
+        print("\n   ⛔ Separate rule, unchanged: never CLAIM a tool nobody has used.")
+        print("      That is honesty. This section is about relevance.")
         print()
 
     if gaps:
