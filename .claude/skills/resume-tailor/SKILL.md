@@ -44,6 +44,18 @@ Use the ATS-safe structure in `references/ats-format-rules.md`: single column, s
 
 **Quick health check.** After writing the spec, run `python engine/resume_score.py personal/applications/<company>/resume.json` for a fast 0-100 read across ATS-safety, quantified impact, and concision. It names the weak (unquantified) bullets and any structural warnings to fix *before* you build the `.docx` — a rule-based sanity check, not a benchmark. Aim to clear the ATS warnings and quantify what the profile can honestly support.
 
+**People are never the obstacle, and a team is never an "it".** Two phrasings pass every other
+check and still say the wrong thing about how someone leads. **Change-leadership bullets that
+name colleagues as what was defeated** — "overcoming years of institutional *resistance*",
+"winning over the skeptics", "fighting for buy-in" — cast the people who were brought along as
+adversaries, in the very sentence meant to prove the candidate brings people along. Name what
+was *entrenched* rather than who was in the way ("institutional habit", "a decade of established
+practice"); the difficulty stays, the adversary goes. And **a team is people, so it takes
+"they", not "it"** — a bullet about developing engineers that reads "giving *it* a roadmap …
+*it* began experimenting" undercuts its own claim. Avoid `headcount`, `FTEs`, `resources` and
+`bodies` for people too. Check both before the de-AI pass; neither is a grammar error, so
+nothing else will catch them.
+
 ### 4 — Cover letter
 Short, specific, built on genuine profile↔target overlap. Structure and rules in `references/cover-letter.md`. No boilerplate openers/closers.
 
