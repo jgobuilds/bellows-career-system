@@ -426,9 +426,33 @@ def validate(spec):
                     f"rest are one sentence, so it should read on with a space or a comma. "
                     f"Rewrite rather than deleting the punctuation: {str(lead)[:44]!r}"
                 )
-        # Every role should carry at least one line. A bare title-and-dates entry
-        # reads as filler to a human and gives an ATS nothing to match on, so the
-        # tenure it was added to prove is the only thing it contributes.
+        # EVERY role carries a content line, `earlier` included. The reason is
+        # IMPORT BEHAVIOUR, not neatness, and the distinction matters because the
+        # neatness reading is what got this rule removed once.
+        #
+        # A parser finds role boundaries by the shape company / title / dates /
+        # content. An entry with no content has no closing edge, so it gets merged
+        # into the block beside it — the same failure already recorded twice in this
+        # file: "Independent Consulting" absorbed a whole consulting block into
+        # Optimum's role-description field on a real Workday submission, and a title
+        # imported BLANK next to an adjacent normalised one. A merged entry looks
+        # fine on the page and is wrong in the system nobody reads back, which is
+        # why the gap was systemic before anyone went looking for it. The role also
+        # contributes no searchable term, so the tenure it was added to prove is its
+        # entire contribution.
+        #
+        # ⚠️ REMOVED 2026-08-24 AND RESTORED THE SAME DAY. It was exempted for
+        # `earlier` on the reasoning that old roles hold the timeline open and
+        # title-and-dates-only is normal practice for a long career. That is true of
+        # PAPER and false of PARSERS, and the code comment it was weighed against —
+        # the renderer's "optional and usually absent for old roles" — described the
+        # old convention rather than this rule. Both now say the same thing.
+        #
+        # The relevance finding that prompted the removal still stands and is not in
+        # conflict: `resume_coverage.py` scored a shipped earlier-role bullet at ZERO
+        # against a whole posting. The answer is a BETTER line, or dropping the role
+        # outright — a role not worth one sentence is rarely worth a block — never a
+        # role with no line.
         #
         # WARNS RATHER THAN FILLING THE GAP. The line has to come from
         # career-profile.md, and a builder that invented one would be fabricating —
@@ -437,7 +461,7 @@ def validate(spec):
         # role that exists only to close a date gap.
         #
         # `earlier` entries carry a singular `bullet` string while experience and
-        # advisory carry a `bullets` list; both count.
+        # advisory carry a `bullets` list; both count, and whitespace counts as absent.
         if not (role.get("bullets") or str(role.get("bullet") or "").strip()):
             warns.append(
                 f"role has no content line: {role.get('company', '?')} — {t!r}. "
@@ -505,6 +529,19 @@ def _para(d, before=0, after=0, align=None):
     p.paragraph_format.space_after = Pt(after)
     if align:
         p.alignment = align
+    return p
+
+
+def _keep_with_next(p):
+    """Bind a paragraph to the one after it so Word will not break between them.
+
+    A company name stranded at the foot of one page with its title, dates and
+    bullets on the next reads as two different employers, and the reader has to
+    turn back to work out whose job they are looking at. Chaining company ->
+    title -> dates means the header always arrives with at least its first
+    bullet, and Word pushes the whole block over instead.
+    """
+    p.paragraph_format.keep_with_next = True
     return p
 
 
@@ -591,13 +628,13 @@ def build_resume(spec, out_path):
         _section(d, "Professional Experience")
 
         def _role_block(title, location_dates, bullets, before):
-            _run(_para(d, before=before), title, bold=True)
-            _run(_para(d, after=1), location_dates)
+            _run(_keep_with_next(_para(d, before=before)), title, bold=True)
+            _run(_keep_with_next(_para(d, after=1)), location_dates)
             for lead, rest in bullets:
                 _bullet(d, lead, rest)
 
         for entry in spec["experience"]:
-            _run(_para(d, before=6), entry["company"], bold=True, size=11)
+            _run(_keep_with_next(_para(d, before=6)), entry["company"], bold=True, size=11)
             if entry.get("roles"):
                 for i, r in enumerate(entry["roles"]):
                     _role_block(r["title"], r["location_dates"], r["bullets"], before=3 if i else 0)
@@ -609,9 +646,18 @@ def build_resume(spec, out_path):
         # reverse-chron puts them last, and folding them in drops one of the three
         # experience-like sections a résumé parser has to segment — one suspect in
         # the Workday import dropping the current role entirely. Same block format
-        # as any other entry; a bullet is optional and usually absent for old roles.
+        # as any other entry — including the content line, which `validate()`
+        # requires here exactly as it does everywhere else.
+        #
+        # ⚠️ This comment used to read "a bullet is optional and usually absent for
+        # old roles", describing the paper convention rather than this codebase's
+        # rule. It was taken at face value on 2026-08-24 and used to justify
+        # exempting `earlier` from the content-line check — the two comments
+        # disagreed, and the wrong one won. The reasoning is the same one written
+        # directly above this block: fewer, WELL-FORMED entries survive an import;
+        # a thin one has no closing edge and gets merged into its neighbour.
         for role in spec.get("earlier", []):
-            _run(_para(d, before=6), role["company"], bold=True, size=11)
+            _run(_keep_with_next(_para(d, before=6)), role["company"], bold=True, size=11)
             bullets = [["", role["bullet"]]] if role.get("bullet") else []
             _role_block(role["title"], role["location_dates"], bullets, before=0)
 
@@ -652,9 +698,9 @@ def build_resume(spec, out_path):
             # fix, because the trigger was the date overlap, not the company name).
             _section(d, "Advisory & Consulting")
             for entry in spec["advisory"]:
-                _run(_para(d, before=6), entry["company"], bold=True, size=11)
-                _run(_para(d), entry["title"], bold=True)
-                _run(_para(d, after=1), entry["location_dates"])
+                _run(_keep_with_next(_para(d, before=6)), entry["company"], bold=True, size=11)
+                _run(_keep_with_next(_para(d)), entry["title"], bold=True)
+                _run(_keep_with_next(_para(d, after=1)), entry["location_dates"])
                 for lead, rest in entry.get("bullets", []):
                     _bullet(d, lead, rest)
         if part == "experience" and spec.get("projects"):

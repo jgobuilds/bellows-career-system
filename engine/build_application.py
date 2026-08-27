@@ -180,6 +180,30 @@ def main():
     except Exception as e:  # never block a build over the profile check
         print(f"\n(LinkedIn check skipped: {e})")
 
+    # SELECTION, not quality. Every other check here asks whether what is on the page
+    # is good; this one asks whether it is the right thing. They are different failures:
+    # a bullet can be true, verified in the bullet library, inside the metric registry
+    # and score well, and still be the wrong accomplishment for the posting. That is not
+    # hypothetical — a vendor-negotiation bullet survived onto a data-engineering résumé
+    # through four rounds while a medallion build on the posting's own stack sat unused.
+    # Runs only when a jd.txt was saved, which is itself the nudge to save one: without
+    # the posting the selection cannot be re-checked later, or by anyone else.
+    rj = os.path.join(folder, "resume.json")
+    jd = os.path.join(folder, "jd.txt")
+    if os.path.exists(rj):
+        if os.path.exists(jd):
+            try:
+                import resume_coverage
+
+                with open(jd, encoding="utf-8") as fh:
+                    print("\n— selection check —")
+                    resume_coverage.report(rj, fh.read(), top=4)
+            except Exception as e:  # advisory: never block a build over relevance
+                print(f"\n(selection check skipped: {e})")
+        else:
+            print("\n○ No jd.txt in this folder — selection was not checked.")
+            print("   Save the posting text there to see what the profile still has unused.")
+
     print("\nDone. Review both files, then submit yourself — nothing is auto-submitted.")
 
 

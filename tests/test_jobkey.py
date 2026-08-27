@@ -53,6 +53,20 @@ class TestIsDuplicate(unittest.TestCase):
             )
         )
 
+    def test_ampersand_and_the_word_and_are_the_same_title(self):
+        # the board writes "&", the pipeline gets typed with "and" - one job, and
+        # before the conjunction was folded every such role re-surfaced each sweep
+        k = self.keys(("USAA", "Director, Data Governance and Compliance"))
+        self.assertTrue(jobkey.is_duplicate("USAA", "Director, Data Governance & Compliance", k))
+        self.assertEqual(
+            jobkey.norm_title("Senior Director, Data Platform & Governance"),
+            jobkey.norm_title("Senior Director, Data Platform and Governance"),
+        )
+
+    def test_folding_the_conjunction_does_not_merge_distinct_roles(self):
+        k = self.keys(("Acme", "Director, Data Platform & Governance"))
+        self.assertFalse(jobkey.is_duplicate("Acme", "Director, Data Platform & Security", k))
+
     def test_distinct_roles_at_same_company_are_not_dupes(self):
         k = self.keys(("CVS Health", "Executive Director, Technology Operations"))
         self.assertFalse(

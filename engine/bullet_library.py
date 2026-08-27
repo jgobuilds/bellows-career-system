@@ -118,6 +118,11 @@ def unverified(spec: dict, data: dict | None = None) -> list[dict]:
     for company, lead, rest in spec_bullets(spec):
         approved = set()
         for b in known.get(company, []):
+            # A phrasing retired for its WORDING keeps its claims verified — the
+            # verb was wrong, the figures were not. Only a "claim" revocation
+            # withdraws verification. See revoke().
+            if (b.get("revoked") or {}).get("kind") == "claim":
+                continue
             approved |= set(b.get("tokens", []))
         new = material_tokens(f"{lead} {rest}") - approved
         if new:
@@ -158,12 +163,263 @@ def approve(spec: dict, note: str = "", data: dict | None = None, path: str = LI
     return added
 
 
+def backlog(data: dict | None = None) -> list[dict]:
+    """Everything already SHIPPED that the ledger has never checked.
+
+    The ledger only ever grows when someone runs `--approve`, so phrasings written
+    before it existed — or in a session where nobody ran it — are in documents that
+    went out while being invisible here. This is the queue for closing that.
+
+    IT IS MUCH SMALLER THAN IT LOOKS, and the reason matters. Counting distinct
+    phrasings across the applications gives a number in the hundreds, which reads
+    as an impossible backlog and invites either a blind bulk import (defeating the
+    point) or giving up. But verification is per-TOKEN: most of those hundreds are
+    rewordings of a fact already checked for that employer, and rewording is the
+    legitimate half of tailoring. The queue is the far smaller set that introduces
+    a claim this employer has never been verified to support.
+
+    Ordered by how many documents use it, because a phrasing already in eight
+    documents is the highest-leverage thing to check and the most expensive to
+    have wrong.
+    """
+    import glob
+
+    data = load() if data is None else data
+    approved_fp = {b["fp"] for rows in (data.get("employers") or {}).values() for b in rows}
+    approved_tok: dict[str, set] = {}
+    for co, rows in (data.get("employers") or {}).items():
+        approved_tok[co] = {t for b in rows if not b.get("revoked") for t in b.get("tokens", [])}
+
+    seen: dict[tuple, dict] = {}
+    root = os.path.join(os.path.dirname(LIBRARY), "*", "resume.json")
+    for path in sorted(glob.glob(root)):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                spec = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        folder = os.path.basename(os.path.dirname(path))
+        for co, lead, rest in spec_bullets(spec):
+            key = (co, lead, rest)
+            row = seen.setdefault(
+                key,
+                {
+                    "company": co,
+                    "lead": lead,
+                    "rest": rest,
+                    "fp": fingerprint(lead, rest),
+                    "documents": [],
+                },
+            )
+            row["documents"].append(folder)
+
+    out = []
+    for row in seen.values():
+        if row["fp"] in approved_fp:
+            continue
+        new = sorted(
+            material_tokens(f"{row['lead']}{row['rest']}") - approved_tok.get(row["company"], set())
+        )
+        if not new:
+            continue  # a rewording of something already checked
+        row["new_tokens"] = new
+        row["warnings"] = _phrasing_warnings(row["company"], row["lead"], row["rest"])
+        out.append(row)
+    return sorted(out, key=lambda r: (-len(r["documents"]), r["company"]))
+
+
+def accept(fps: set[str], note: str, data: dict | None = None, path: str = LIBRARY) -> int:
+    """Approve NAMED phrasings out of the backlog, and only those.
+
+    `--approve <spec>` takes a whole document at once, which is right when the
+    document has just been reviewed end to end. It is wrong for the backlog: a
+    spec that shipped months ago usually contains several fine phrasings and one
+    that should never have gone out, and approving by document would sweep the bad
+    one in under cover of the good ones. Reviewing by fingerprint keeps the unit of
+    judgement the same as the unit of evidence.
+    """
+    data = load(path) if data is None else data
+    emp = data.setdefault("employers", {})
+    wanted = {r["fp"]: r for r in backlog(data) if r["fp"] in fps}
+    added = 0
+    for fp, row in wanted.items():
+        bucket = emp.setdefault(row["company"], [])
+        if fp in {b["fp"] for b in bucket}:
+            continue
+        bucket.append(
+            {
+                "fp": fp,
+                "lead": row["lead"],
+                "rest": row["rest"],
+                "tokens": sorted(material_tokens(f"{row['lead']}{row['rest']}")),
+                "approved": date.today().isoformat(),
+                "note": note,
+            }
+        )
+        added += 1
+    save(data, path)
+    return added
+
+
+def _phrasing_warnings(company: str, lead: str, rest: str) -> list[str]:
+    """Re-check one stored phrasing against the rules AS THEY STAND NOW."""
+    import metric_registry
+
+    spec = {
+        "experience": [
+            {
+                "company": company,
+                "title": "Role",
+                "location_dates": "City, ST | May 2019 – Present",
+                "bullets": [[lead, rest]],
+            }
+        ]
+    }
+    return metric_registry.warnings(spec)
+
+
+# The registry marks an advisory finding "NOTE:" and everything else is a hard
+# violation. Revoking on an advisory would be over-reach: "these two figures share
+# a passage, check it reads right" is a prompt to look, not a verdict that the
+# wording is wrong.
+def _is_hard(warning: str) -> bool:
+    return not warning.startswith("NOTE:")
+
+
+def revalidate(data: dict | None = None) -> list[dict]:
+    """Approved phrasings that TODAY'S rules reject.
+
+    APPROVAL IS A SNAPSHOT, AND RULES MOVE. This ledger records that a human
+    checked a phrasing on a date. It cannot record that the phrasing was checked
+    against a rule written three weeks later — so a bullet approved in July stays
+    "verified" forever, even after the claim inside it is corrected in August.
+
+    That is not hypothetical. Four Hartford phrasings using a growth verb with the
+    25-person figure sat approved here while the registry had forbidden exactly
+    that pairing in prose the whole time, and `--suggest` offered one of them as a
+    top-three pick for a live application. The ledger was working as designed; the
+    design was missing this.
+    """
+    data = load() if data is None else data
+    out: list[dict] = []
+    for company, bullets in (data.get("employers") or {}).items():
+        for b in bullets:
+            if b.get("revoked"):
+                continue
+            warns = _phrasing_warnings(company, b.get("lead", ""), b.get("rest", ""))
+            if warns:
+                out.append(
+                    {
+                        "company": company,
+                        "fp": b["fp"],
+                        "text": f"{b.get('lead', '')}{b.get('rest', '')}",
+                        "warnings": warns,
+                        "hard": any(_is_hard(w) for w in warns),
+                    }
+                )
+    return out
+
+
+def revoke(
+    fps: set[str],
+    reason: str,
+    kind: str = "wording",
+    data: dict | None = None,
+    path: str = LIBRARY,
+) -> int:
+    """Mark phrasings as no longer usable, keeping the record of why.
+
+    Marked, not deleted: the entry is the evidence that this wording was once
+    approved, which is what makes the failure legible next time someone asks how
+    a false claim reached four documents.
+
+    TWO KINDS, AND CONFLATING THEM BROKE THIS ONCE:
+
+      "wording"  the CLAIMS are true, this phrasing is retired. A forbidden verb,
+                 a framing rule, a stale house style. The claims stay approved.
+      "claim"    something asserted here is FALSE for this employer. The claims
+                 must stop counting as verified.
+
+    The fingerprint keys on material tokens, not on prose, BY DESIGN — that is what
+    lets rewording stay silent. So revoking a phrasing revokes its CLAIMS, which is
+    right for "claim" and wrong for "wording". Eight phrasings were retired for
+    forbidden verbs and a framing rule, every claim inside them true, and it
+    withdrew verification from figures like the 800+ developers and the $300K
+    infrastructure saving — which then re-flagged as unverified on the next build
+    of a document that had nothing wrong with it.
+    """
+    data = load(path) if data is None else data
+    n = 0
+    for bullets in (data.get("employers") or {}).values():
+        for b in bullets:
+            if b["fp"] in fps and not b.get("revoked"):
+                b["revoked"] = {"on": date.today().isoformat(), "why": reason, "kind": kind}
+                n += 1
+    save(data, path)
+    return n
+
+
+def suggest(jd_text: str, top: int = 5, data: dict | None = None) -> dict[str, list[dict]]:
+    """Verified phrasings ranked against a posting, grouped by employer.
+
+    THIS IS WHAT MAKES THE LEDGER A GENERATION SOURCE rather than an audit trail.
+    Without it the library only ever answered "has this been checked?", so the
+    fastest way to write a resume stayed "copy the last one" — which is precisely
+    how a bullet propagates by never being noticed.
+
+    It does NOT propose a canonical bullet, and it must not: the module docstring
+    settles that, and it is right. One employer carries ~31 verified phrasings
+    because the same fact deserves different emphasis for different postings.
+    What this offers is the MENU — here are the ways you have already described
+    this employer safely, best fit for this posting first — and the choosing stays
+    a human job.
+    """
+    import resume_coverage
+
+    data = load() if data is None else data
+    jd_concepts = resume_coverage.concepts(resume_coverage.tokens(jd_text))
+    out: dict[str, list[dict]] = {}
+    for company, bullets in (data.get("employers") or {}).items():
+        scored = []
+        for b in bullets:
+            if b.get("revoked"):
+                continue
+            text = f"{b.get('lead', '')}{b.get('rest', '')}"
+            # Re-checked at SUGGESTION time, not trusted from the approval date.
+            # A phrasing approved before a rule existed is not verified against it.
+            if _phrasing_warnings(company, b.get("lead", ""), b.get("rest", "")):
+                continue
+            hits = resume_coverage.concepts(resume_coverage.tokens(text)) & jd_concepts
+            scored.append({**b, "score": len(hits), "text": text})
+        scored.sort(key=lambda x: -x["score"])
+        out[company] = [s for s in scored if s["score"] > 0][:top]
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Ledger of verified bullet phrasings.")
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--check", metavar="SPEC")
     g.add_argument("--approve", metavar="SPEC")
+    g.add_argument("--suggest", metavar="JD", help="rank verified phrasings against a posting")
+    g.add_argument(
+        "--revalidate",
+        action="store_true",
+        help="re-check every approved phrasing against the rules as they stand now",
+    )
+    g.add_argument(
+        "--backlog",
+        action="store_true",
+        help="shipped phrasings the ledger has never checked, highest-leverage first",
+    )
+    g.add_argument(
+        "--accept",
+        metavar="FP[,FP...]",
+        help="approve named backlog fingerprints, and only those (needs --note)",
+    )
     g.add_argument("--stats", action="store_true")
+    ap.add_argument("--top", type=int, default=5)
+    ap.add_argument("--fix", action="store_true", help="with --revalidate: revoke what fails")
     ap.add_argument("--note", default="", help="why these phrasings are correct")
     a = ap.parse_args()
 
@@ -171,6 +427,90 @@ def main() -> int:
         data = load()
         for co, bullets in sorted(data.get("employers", {}).items()):
             print(f"  {co[:40]:42} {len(bullets)} approved phrasing(s)")
+        return 0
+
+    if a.accept:
+        if not a.note:
+            print("  --accept needs --note: record WHY these were judged correct.")
+            return 1
+        fps = {x.strip() for x in a.accept.split(",") if x.strip()}
+        n = accept(fps, note=a.note)
+        print(f"  approved {n} phrasing(s) from the backlog")
+        missed = fps - {b["fp"] for rows in load()["employers"].values() for b in rows}
+        if missed:
+            print(f"  ⚠ not found in the backlog: {', '.join(sorted(missed))}")
+        return 0
+
+    if a.backlog:
+        rows = backlog()
+        if not rows:
+            print("  Nothing shipped is unchecked. The ledger covers every claim in every spec.")
+            return 0
+        print(f"  {len(rows)} shipped phrasing(s) introduce a claim this ledger has never")
+        print("  checked for that employer. Ordered by how many documents use each —")
+        print("  a phrasing already in eight documents is the most expensive to have wrong.\n")
+        for r in rows[: a.top]:
+            docs = len(r["documents"])
+            print(f"  [{r['company'][:30]:32}] in {docs} document(s)")
+            print(f"     {r['lead']}{r['rest'][:96]}")
+            print(f"     new claim(s): {', '.join(r['new_tokens'])}")
+            for w in r["warnings"]:
+                print(f"     ⛔ {w[:100]}")
+            print(f"     used by: {', '.join(sorted(set(r['documents']))[:4])}")
+            print()
+        if len(rows) > a.top:
+            print(f"  ... {len(rows) - a.top} more. Raise --top to see them.")
+        print("  Read each against career-profile.md, then --approve the spec it lives in.")
+        return 0
+
+    if a.revalidate:
+        rows = revalidate()
+        if not rows:
+            print("  Every approved phrasing still passes the current rules.")
+            return 0
+        hard = [r for r in rows if r["hard"]]
+        print(f"  {len(rows)} approved phrasing(s) fail the rules as they stand now")
+        print(f"  — {len(hard)} hard violation(s), {len(rows) - len(hard)} advisory.")
+        print("  Approval is a snapshot; rules move. These were checked against an")
+        print("  earlier version of the truth and have been trusted ever since.\n")
+        for r in rows:
+            print(f"  [{r['company'][:34]}] {r['fp']}")
+            print(f"     {r['text'][:104]}")
+            for w in r["warnings"]:
+                print(f"     ⛔ {w[:104]}")
+            print()
+        if a.fix:
+            n = revoke(
+                {r["fp"] for r in rows if r["hard"]},
+                reason="failed --revalidate against current rules",
+            )
+            print(f"  revoked {n} hard violation(s) — kept on record, no longer offered")
+            print("  Advisory findings are left alone: 'check this reads right' is a")
+            print("  prompt to look, not a verdict that the wording is wrong.")
+            return 0
+        print("  Re-run with --fix to revoke them.")
+        return 1
+
+    if a.suggest:
+        with open(a.suggest, encoding="utf-8") as fh:
+            jd_text = fh.read()
+        picks = suggest(jd_text, top=a.top)
+        total = sum(len(v) for v in picks.values())
+        if not total:
+            print("  Nothing in the library scores against this posting.")
+            print("  Either the library is thin for these employers, or the role is")
+            print("  far enough from the record that new phrasings are the honest path.")
+            return 0
+        print(f"  {total} verified phrasing(s) ranked against this posting.")
+        print("  These are ALREADY CHECKED against career-profile.md — reuse beats rewriting,")
+        print("  and picking from here is what replaces copying the last resume.\n")
+        for company, rows in picks.items():
+            if not rows:
+                continue
+            print(f"  ── {company}")
+            for r in rows:
+                print(f"     [{r['score']:2}] {r['text'][:92]}")
+            print()
         return 0
 
     path = a.check or a.approve

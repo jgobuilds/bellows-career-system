@@ -82,6 +82,50 @@ for lbl, log in [("clean ruff check", "Running ruff check src tests\nAll checks 
     hits = [k["id"] for k in cd.diagnose(log + "\n" + "x" * 2100)["known"]]
     check(f"{lbl} claims no cause", hits == [], str(hits))
 
+print("\nAnd THIS suite's own output is not a linter failure:")
+# Third time for the same collision, second time for this row. The signature was
+# `ruff` AND `Found ` anywhere in the whole log. The lines above supply `ruff`
+# ("clean ruff check claims no cause") and a heading forty lines up supplies
+# `Found ` ("False positives found in the wild") — so the cause table matched the
+# test that tests the cause table, and two ai-control-plane runs were signed with
+# a cause that was not theirs. The row is now `same_line` on ruff's summary line.
+_self = open(os.path.join(HERE, "fixtures", "ci-log-self-referential-ruff.txt"),
+             encoding="utf-8").read()
+_LINT = "vendored-file-fails-the-linter"
+_ids = [k["id"] for k in cd.diagnose(_self)["known"]]
+check("our own PASS lines do not claim the linter row", _LINT not in _ids, str(_ids))
+check("and nothing else is claimed off them either", _ids == [], str(_ids))
+# The mechanism, pinned. Without the flag the shipped row matches that log again,
+# which is the entire reason the flag is on it.
+_row = next(c for c in cd.load_causes() if c["id"] == _LINT)
+check("without same_line, this suite's output WOULD have matched",
+      cd.match_known(_self, [{**_row, "same_line": False,
+                              "match": ["ruff", "Found "],
+                              "not_match": ["All checks passed"]}]) != [])
+# ...and it must still fire on the failure it was written for. Both ruff plurals,
+# because "Found 1 error." and "Found 20 errors." are the same signature.
+for n, plural in ((1, "error"), (20, "errors")):
+    hits = [k["id"] for k in cd.diagnose(
+        f"Running ruff check src tests\n"
+        f"scripts/pii_scan.py:1:8: F401 [*] `os` imported but unused\n"
+        f"Found {n} {plural}.")["known"]]
+    check(f"a real ruff check failure ({n} {plural}) still matches",
+          hits == [_LINT], str(hits))
+# mypy runs in the SAME job as ruff in two consuming repos and phrases its
+# summary the same way. Its failure is a type error, not a vendored file the
+# linter rejects, and a confident wrong cause costs a debugging session.
+_mypy = ("engine/x.py:12: error: Incompatible return value type\n"
+         "Found 3 errors in 1 file (checked 12 source files)")
+check("mypy's summary is not diagnosed as the vendored-linter cause",
+      _LINT not in [k["id"] for k in cd.diagnose(_mypy)["known"]],
+      str([k["id"] for k in cd.diagnose(_mypy)["known"]]))
+# The sibling row keys on a different message and must be untouched by all of
+# this — one cause, two signatures, and narrowing one must not narrow the other.
+check("the `Would reformat` sibling still fires",
+      "vendored-file-reformatted" in [k["id"] for k in cd.diagnose(
+          "ruff format --check src tests\nWould reformat: scripts\\pii_scan.py"
+      )["known"]])
+
 print("\nA near-miss must NOT claim a match:")
 res = cd.diagnose("engine: built-in only (gitleaks not installed)")
 check("'gitleaks not installed' is the normal case, not the stale-bridge bug",

@@ -44,6 +44,29 @@ Use the ATS-safe structure in `references/ats-format-rules.md`: single column, s
 
 **Quick health check.** After writing the spec, run `python engine/resume_score.py personal/applications/<company>/resume.json` for a fast 0-100 read across ATS-safety, quantified impact, and concision. It names the weak (unquantified) bullets and any structural warnings to fix *before* you build the `.docx` — a rule-based sanity check, not a benchmark. Aim to clear the ATS warnings and quantify what the profile can honestly support.
 
+**"I" vs "we" vs neither is decided by the CLAIM, not by tone.** Swapping globally in either
+direction costs the candidate, so decide per clause. A **judgment or decision** takes **I** —
+the decision itself is the evidence, and "we chose" hands away the thing being assessed.
+**Execution or delivery** takes **we** — nobody believes a director personally ran every
+pipeline, and "I ran" invites a hands-on question a leadership candidate does not want. A
+**leadership action** takes **neither**: `Led a 25-person organization` reads strongest with an
+implied subject, and that is where most bullets belong. The question only arises in a bullet's
+second clause, since a lead-in verb has already settled it. Note the failure modes differ by
+artifact and do not conflict: a résumé fails by being **ambiguous** about attribution, an
+interview answer fails by being **evasive** about what the candidate personally did.
+
+**People are never the obstacle, and a team is never an "it".** Two phrasings pass every other
+check and still say the wrong thing about how someone leads. **Change-leadership bullets that
+name colleagues as what was defeated** — "overcoming years of institutional *resistance*",
+"winning over the skeptics", "fighting for buy-in" — cast the people who were brought along as
+adversaries, in the very sentence meant to prove the candidate brings people along. Name what
+was *entrenched* rather than who was in the way ("institutional habit", "a decade of established
+practice"); the difficulty stays, the adversary goes. And **a team is people, so it takes
+"they", not "it"** — a bullet about developing engineers that reads "giving *it* a roadmap …
+*it* began experimenting" undercuts its own claim. Avoid `headcount`, `FTEs`, `resources` and
+`bodies` for people too. Check both before the de-AI pass; neither is a grammar error, so
+nothing else will catch them.
+
 ### 4 — Cover letter
 Short, specific, built on genuine profile↔target overlap. Structure and rules in `references/cover-letter.md`. No boilerplate openers/closers.
 

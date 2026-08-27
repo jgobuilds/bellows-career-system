@@ -52,6 +52,22 @@ Everyday commands, dev setup, and the commit-msg gate are all in
 
 ## Working here
 
+- **Company research lives in `personal/companies/`, and the store is SPLIT BY PURPOSE.**
+  Profiles for companies you are interviewing with live here, in Bellows, because researching
+  the employer is part of what this system does. Business-development and consulting-pursuit
+  profiles live in a separate store owned by `brightside-data`. The split is by the QUESTION
+  being answered — *should I work here* versus *should we pursue this account* — never by which
+  project created the file. See `brightside-data/docs/decisions/0002-*`.
+  **Look here before researching any company.** The scripts live in `brightside-data` (one
+  writer, two stores, one schema) and are pointed at a store with `COMPANY_PROFILE_STORE`:
+  ```bash
+  export COMPANY_PROFILE_STORE=personal/companies
+  S=<brightside-data>/skills/company-profile/scripts
+  python $S/profile_store.py --lookup <slug>
+  python $S/people_store.py  --brief <company>:<person>
+  ```
+  ⚠️ A single `--index` shows ONE store, so finding nothing here does not mean no research
+  exists — check the other side before concluding it is unresearched.
 - **The profile is the product; the sweep is optional.** `career-profile.md` is what makes
   every downstream artifact honest, and it is the reason to use this at all. Lead discovery
   is a convenience layer over a finite list of company boards — it cannot see companies the
