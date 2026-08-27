@@ -472,17 +472,21 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
         )
         self.assertEqual(self._bare_role_warnings(spec), [])
 
-    def test_an_earlier_entry_with_no_bullet_is_FINE(self):
-        """The oldest roles earn their place by holding the TIMELINE open — tenure,
-        progression, no unexplained gap — so title-and-dates-only is the standard
-        form for a long career, not an unfinished entry.
+    def test_an_earlier_entry_with_no_bullet_STILL_WARNS(self):
+        """The rule covers `earlier` too, and the reason is IMPORT BEHAVIOUR.
 
-        This asserted the opposite until 2026-08-24, which contradicted the
-        renderer's own note that a bullet is "optional and usually absent for old
-        roles". The rule that replaced it: an earlier bullet is optional and has to
-        earn its line against the posting like any other. A shipped one scored ZERO
-        across a whole job description while sitting in eight documents; requiring a
-        line would have forced it to stay.
+        A parser finds role boundaries by company / title / dates / content. An
+        entry with no content has no closing edge and gets merged into the block
+        beside it — the failure already recorded twice in resume_builder: a whole
+        consulting block absorbed into the adjacent role's description field on a
+        real Workday submission, and a title imported blank.
+
+        ⚠️ This asserted the OPPOSITE for part of 2026-08-24. The exemption was
+        argued from paper convention — title-and-dates-only is normal for a long
+        career — which is true of paper and false of parsers. Restored the same
+        day. The relevance finding that prompted it is not in conflict: a bullet
+        earning nothing against a posting should be a BETTER line, or the role
+        should go entirely, never a role with no line.
         """
         spec = self._spec(
             earlier=[
@@ -493,9 +497,11 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
                 }
             ]
         )
-        self.assertEqual(self._bare_role_warnings(spec), [])
+        warns = self._bare_role_warnings(spec)
+        self.assertEqual(len(warns), 1)
+        self.assertIn("Old Co", warns[0])
 
-    def test_an_empty_bullet_string_on_an_earlier_entry_is_also_fine(self):
+    def test_whitespace_counts_as_absent(self):
         spec = self._spec(
             earlier=[
                 {
@@ -506,7 +512,7 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
                 }
             ]
         )
-        self.assertEqual(self._bare_role_warnings(spec), [])
+        self.assertEqual(len(self._bare_role_warnings(spec)), 1)
 
     def test_a_MAIN_experience_role_with_no_bullets_still_warns(self):
         """The exemption is for `earlier` only. A current-era role carrying nothing

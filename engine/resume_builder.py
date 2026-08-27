@@ -202,9 +202,7 @@ def _all_roles(spec):
         else:
             roles.append(e)
     roles.extend(spec.get("advisory", []))
-    # Tagged, because the oldest roles play a different part: they hold the TIMELINE
-    # open. See the no-content-line rule below, which deliberately exempts them.
-    roles.extend({**e, "_earlier": True} for e in spec.get("earlier", []))
+    roles.extend(spec.get("earlier", []))
     return roles
 
 
@@ -428,20 +426,33 @@ def validate(spec):
                     f"rest are one sentence, so it should read on with a space or a comma. "
                     f"Rewrite rather than deleting the punctuation: {str(lead)[:44]!r}"
                 )
-        # Every CURRENT-ERA role should carry at least one line. A recent entry with
-        # only a title and dates reads as unfinished, and gives an ATS nothing to
-        # match on.
+        # EVERY role carries a content line, `earlier` included. The reason is
+        # IMPORT BEHAVIOUR, not neatness, and the distinction matters because the
+        # neatness reading is what got this rule removed once.
         #
-        # ⚠️ `earlier` ENTRIES ARE EXEMPT, and that is the rule rather than an
-        # oversight. The oldest roles earn their place by holding the TIMELINE open —
-        # tenure, progression, no unexplained gap — which is exactly why the
-        # title-and-dates-only form is standard for a long career. A bullet there is
-        # optional, and it has to earn its line against the posting like any other:
-        # `resume_coverage.py` scored one shipped earlier-role bullet at ZERO across a
-        # whole posting while it sat in eight documents. Requiring a line would have
-        # forced that bullet to stay. This warning used to fire on `earlier` too,
-        # which contradicted the renderer's own note that a bullet is "optional and
-        # usually absent for old roles".
+        # A parser finds role boundaries by the shape company / title / dates /
+        # content. An entry with no content has no closing edge, so it gets merged
+        # into the block beside it — the same failure already recorded twice in this
+        # file: "Independent Consulting" absorbed a whole consulting block into
+        # Optimum's role-description field on a real Workday submission, and a title
+        # imported BLANK next to an adjacent normalised one. A merged entry looks
+        # fine on the page and is wrong in the system nobody reads back, which is
+        # why the gap was systemic before anyone went looking for it. The role also
+        # contributes no searchable term, so the tenure it was added to prove is its
+        # entire contribution.
+        #
+        # ⚠️ REMOVED 2026-08-24 AND RESTORED THE SAME DAY. It was exempted for
+        # `earlier` on the reasoning that old roles hold the timeline open and
+        # title-and-dates-only is normal practice for a long career. That is true of
+        # PAPER and false of PARSERS, and the code comment it was weighed against —
+        # the renderer's "optional and usually absent for old roles" — described the
+        # old convention rather than this rule. Both now say the same thing.
+        #
+        # The relevance finding that prompted the removal still stands and is not in
+        # conflict: `resume_coverage.py` scored a shipped earlier-role bullet at ZERO
+        # against a whole posting. The answer is a BETTER line, or dropping the role
+        # outright — a role not worth one sentence is rarely worth a block — never a
+        # role with no line.
         #
         # WARNS RATHER THAN FILLING THE GAP. The line has to come from
         # career-profile.md, and a builder that invented one would be fabricating —
@@ -450,10 +461,8 @@ def validate(spec):
         # role that exists only to close a date gap.
         #
         # `earlier` entries carry a singular `bullet` string while experience and
-        # advisory carry a `bullets` list; both count.
-        if not role.get("_earlier") and not (
-            role.get("bullets") or str(role.get("bullet") or "").strip()
-        ):
+        # advisory carry a `bullets` list; both count, and whitespace counts as absent.
+        if not (role.get("bullets") or str(role.get("bullet") or "").strip()):
             warns.append(
                 f"role has no content line: {role.get('company', '?')} — {t!r}. "
                 f"Add one from career-profile.md, or fold the dates into the role "
@@ -637,7 +646,16 @@ def build_resume(spec, out_path):
         # reverse-chron puts them last, and folding them in drops one of the three
         # experience-like sections a résumé parser has to segment — one suspect in
         # the Workday import dropping the current role entirely. Same block format
-        # as any other entry; a bullet is optional and usually absent for old roles.
+        # as any other entry — including the content line, which `validate()`
+        # requires here exactly as it does everywhere else.
+        #
+        # ⚠️ This comment used to read "a bullet is optional and usually absent for
+        # old roles", describing the paper convention rather than this codebase's
+        # rule. It was taken at face value on 2026-08-24 and used to justify
+        # exempting `earlier` from the content-line check — the two comments
+        # disagreed, and the wrong one won. The reasoning is the same one written
+        # directly above this block: fewer, WELL-FORMED entries survive an import;
+        # a thin one has no closing edge and gets merged into its neighbour.
         for role in spec.get("earlier", []):
             _run(_keep_with_next(_para(d, before=6)), role["company"], bold=True, size=11)
             bullets = [["", role["bullet"]]] if role.get("bullet") else []
