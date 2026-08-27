@@ -118,7 +118,10 @@ def unverified(spec: dict, data: dict | None = None) -> list[dict]:
     for company, lead, rest in spec_bullets(spec):
         approved = set()
         for b in known.get(company, []):
-            if b.get("revoked"):
+            # A phrasing retired for its WORDING keeps its claims verified — the
+            # verb was wrong, the figures were not. Only a "claim" revocation
+            # withdraws verification. See revoke().
+            if (b.get("revoked") or {}).get("kind") == "claim":
                 continue
             approved |= set(b.get("tokens", []))
         new = material_tokens(f"{lead} {rest}") - approved
@@ -317,19 +320,40 @@ def revalidate(data: dict | None = None) -> list[dict]:
     return out
 
 
-def revoke(fps: set[str], reason: str, data: dict | None = None, path: str = LIBRARY) -> int:
+def revoke(
+    fps: set[str],
+    reason: str,
+    kind: str = "wording",
+    data: dict | None = None,
+    path: str = LIBRARY,
+) -> int:
     """Mark phrasings as no longer usable, keeping the record of why.
 
     Marked, not deleted: the entry is the evidence that this wording was once
     approved, which is what makes the failure legible next time someone asks how
     a false claim reached four documents.
+
+    TWO KINDS, AND CONFLATING THEM BROKE THIS ONCE:
+
+      "wording"  the CLAIMS are true, this phrasing is retired. A forbidden verb,
+                 a framing rule, a stale house style. The claims stay approved.
+      "claim"    something asserted here is FALSE for this employer. The claims
+                 must stop counting as verified.
+
+    The fingerprint keys on material tokens, not on prose, BY DESIGN — that is what
+    lets rewording stay silent. So revoking a phrasing revokes its CLAIMS, which is
+    right for "claim" and wrong for "wording". Eight phrasings were retired for
+    forbidden verbs and a framing rule, every claim inside them true, and it
+    withdrew verification from figures like the 800+ developers and the $300K
+    infrastructure saving — which then re-flagged as unverified on the next build
+    of a document that had nothing wrong with it.
     """
     data = load(path) if data is None else data
     n = 0
     for bullets in (data.get("employers") or {}).values():
         for b in bullets:
             if b["fp"] in fps and not b.get("revoked"):
-                b["revoked"] = {"on": date.today().isoformat(), "why": reason}
+                b["revoked"] = {"on": date.today().isoformat(), "why": reason, "kind": kind}
                 n += 1
     save(data, path)
     return n

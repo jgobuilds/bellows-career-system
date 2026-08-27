@@ -197,3 +197,58 @@ class TestForbiddenClaimsAreEmployerScoped(unittest.TestCase):
             data=self.data,
         )
         self.assertFalse(any("FORBIDDEN CLAIM" in x for x in w))
+
+
+class TestRevocationKind(unittest.TestCase):
+    """Retiring a WORDING must not withdraw verification from true CLAIMS.
+
+    The fingerprint keys on material tokens rather than prose, by design — that is
+    what lets rewording stay silent. So revoking a phrasing revokes its claims,
+    which is right when something asserted is false and wrong when only the verb
+    was. Eight phrasings retired for forbidden verbs and a framing rule pulled
+    verification off figures like "800+ developers", which then re-flagged as
+    unverified on the next build of a document with nothing wrong with it.
+    """
+
+    def setUp(self):
+        fd, self.path = tempfile.mkstemp(suffix=".json")
+        os.close(fd)
+        self.addCleanup(os.unlink, self.path)
+        self.spec = {
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director",
+                    "location_dates": "City, ST | May 2019 – Present",
+                    "bullets": [["Led a 25-person org", " serving 800+ developers."]],
+                }
+            ]
+        }
+
+    def _data(self, kind):
+        e = _entry("Grew a single unit into a 25-person org", " serving 800+ developers.", "f1")
+        e["tokens"] = ["25", "800+"]
+        e["revoked"] = {"on": "2026-08-24", "why": "forbidden verb", "kind": kind}
+        return {"employers": {"Acme": [e]}}
+
+    def test_a_wording_revocation_KEEPS_the_claims_verified(self):
+        rows = bl.unverified(self.spec, data=self._data("wording"))
+        self.assertEqual(rows, [], "true figures were withdrawn by a wording retirement")
+
+    def test_a_claim_revocation_WITHDRAWS_them(self):
+        rows = bl.unverified(self.spec, data=self._data("claim"))
+        self.assertTrue(rows, "a false claim must stop counting as verified")
+        self.assertIn("800+", rows[0]["new_tokens"])
+
+    def test_the_default_kind_is_wording(self):
+        """The safer default: retiring a phrasing is usually a style call, and
+        silently un-verifying true figures is the damaging direction."""
+        data = {"employers": {"Acme": [_entry("A claim", " with 800+ things.", "x1")]}}
+        bl.revoke({"x1"}, "style", data=data, path=self.path)
+        self.assertEqual(data["employers"]["Acme"][0]["revoked"]["kind"], "wording")
+
+    def test_a_revoked_phrasing_is_still_never_suggested_either_way(self):
+        for kind in ("wording", "claim"):
+            self.assertEqual(
+                bl.suggest("25-person org developers", data=self._data(kind))["Acme"], []
+            )
