@@ -658,7 +658,14 @@ def build_resume(spec, out_path):
         # a thin one has no closing edge and gets merged into its neighbour.
         for role in spec.get("earlier", []):
             _run(_keep_with_next(_para(d, before=6)), role["company"], bold=True, size=11)
-            bullets = [["", role["bullet"]]] if role.get("bullet") else []
+            # A two-part `bullets` list wins, so the oldest roles can carry a BOLD
+            # lead-in like every other entry. They could not before: the singular
+            # `bullet` string was wrapped with an empty lead-in, which rendered the
+            # whole line unbolded. On the page that reads as a different KIND of
+            # entry — the eye scans bold lead-ins down the left, and these three
+            # simply dropped out of that scan. The legacy string still works and
+            # still renders plain, so nothing already written has to change.
+            bullets = role.get("bullets") or ([["", role["bullet"]]] if role.get("bullet") else [])
             _role_block(role["title"], role["location_dates"], bullets, before=0)
 
     def _emit_education():

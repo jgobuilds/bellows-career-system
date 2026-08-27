@@ -717,3 +717,104 @@ class TestBulletContinuationReadsAsOneSentence(unittest.TestCase):
         w = self._warnings(": an elaboration follows.")[0]
         self.assertIn("Did a thing", w)
         self.assertIn("Rewrite", w)
+
+
+class TestEarlierRolesCanCarryABoldLeadIn(unittest.TestCase):
+    """The oldest roles must be able to bold a lead-in like every other entry.
+
+    They could not: the singular `bullet` string was wrapped as `[["", text]]`,
+    an empty lead-in, so the whole line rendered unbolded. On the page that reads
+    as a different KIND of entry — the eye scans bold lead-ins down the left, and
+    those roles dropped out of the scan entirely.
+
+    The legacy string still works and still renders plain, so nothing already
+    written has to change.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def _doc(self, earlier):
+        import docx
+
+        spec = {
+            "name": "A Person",
+            "contact": "Somewhere, ZZ | a@b.co",
+            "summary": "A summary.",
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                    "bullets": [["Did a thing", " and it worked."]],
+                }
+            ],
+            "earlier": earlier,
+        }
+        out = os.path.join(self.tmp, "r.docx")
+        resume_builder.build_resume(spec, out)
+        return docx.Document(out)
+
+    def _bold_in_bullets(self, doc):
+        return [
+            r.text
+            for p in doc.paragraphs
+            if p.text.startswith("•")
+            for r in p.runs
+            if r.bold and r.text.strip() and r.text.strip() != "•"
+        ]
+
+    def test_a_two_part_bullets_list_renders_a_bold_lead_in(self):
+        doc = self._doc(
+            [
+                {
+                    "company": "Old Co",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | 2008 – 2012",
+                    "bullets": [["Automated the reporting set", " and cut the cycle to one day."]],
+                }
+            ]
+        )
+        self.assertIn("Automated the reporting set", self._bold_in_bullets(doc))
+
+    def test_the_legacy_singular_string_still_renders_unbolded(self):
+        doc = self._doc(
+            [
+                {
+                    "company": "Old Co",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | 2008 – 2012",
+                    "bullet": "Automated the reporting set and cut the cycle to one day.",
+                }
+            ]
+        )
+        self.assertNotIn("Automated the reporting set", self._bold_in_bullets(doc))
+
+    def test_bullets_wins_when_both_are_present(self):
+        doc = self._doc(
+            [
+                {
+                    "company": "Old Co",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | 2008 – 2012",
+                    "bullet": "The legacy line.",
+                    "bullets": [["The newer lead-in", " and its continuation."]],
+                }
+            ]
+        )
+        self.assertIn("The newer lead-in", self._bold_in_bullets(doc))
+
+    def test_a_two_part_earlier_bullet_satisfies_the_content_line_rule(self):
+        spec = {
+            "earlier": [
+                {
+                    "company": "Old Co",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | 2008 – 2012",
+                    "bullets": [["A lead-in", " and its continuation."]],
+                }
+            ]
+        }
+        warns = [w for w in resume_builder.validate(spec) if "no content line" in w]
+        self.assertEqual(warns, [])
