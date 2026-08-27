@@ -41,6 +41,24 @@ BULLET_INDENT_IN = 0.18
 BODY_PT = 10.5
 DPI = 96.0
 
+# CALIBRATION, measured against Word's actual output rather than reasoned about.
+#
+# Raw advance widths put slightly more on a line than Word does, and the gap only
+# shows at the boundary — which is precisely where this tool's advice lives. The
+# first version called a real 4-line bullet "3 lines, last line 99% full", so it
+# reported a full line where the page showed four characters stranded alone. A
+# tool that is right in the easy cases and wrong at the margin is worse than no
+# tool, because the margin is the only place anyone consults it.
+#
+# Derived from four bullets whose rendered line counts were read off the page,
+# then checked that no shorter margin reproduces all four. 0.10in is the smallest
+# that does; 0.12 also fits, so this sits at the conservative end of the range
+# rather than tuned to a single case.
+#
+# ⚠️ Re-derive this if the body font, point size or margins change. It is a
+# correction for one specific rendering, not a universal constant.
+WORD_MARGIN_IN = 0.10
+
 
 def _fonts() -> dict | None:
     """The real faces, or None if they cannot be loaded.
@@ -102,7 +120,7 @@ def analyse(spec: dict, orphan_pct: float, room_pct: float) -> list[dict]:
     fonts = _fonts()
     if fonts is None:
         return []
-    usable = PAGE_USABLE_IN - BULLET_INDENT_IN
+    usable = PAGE_USABLE_IN - BULLET_INDENT_IN - WORD_MARGIN_IN
     out = []
     for entry in spec.get("experience", []) + spec.get("advisory", []):
         for role in entry.get("roles") or [entry]:
@@ -172,7 +190,7 @@ def main() -> int:
         print(f"   [{r['lines']} lines, last {r['fill']:.0%}]  {r['company'][:22]}")
         print(f"      {r['lead']}{r['rest'][:70]}")
         print(
-            f"      → trim ~{r['fill'] * (PAGE_USABLE_IN - BULLET_INDENT_IN) * 14:.0f} "
+            f"      → trim ~{r['fill'] * (PAGE_USABLE_IN - BULLET_INDENT_IN - WORD_MARGIN_IN) * 14:.0f} "
             f"characters to pull it back"
         )
     print()
