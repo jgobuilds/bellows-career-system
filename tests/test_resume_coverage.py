@@ -215,3 +215,124 @@ class TestBestMatch(unittest.TestCase):
 
     def test_no_bullets_is_safe(self):
         self.assertEqual(resume_coverage.best_match({"anything"}, []), (None, 0))
+
+
+class TestMisplacedSentences(unittest.TestCase):
+    """The structural half of "one bullet, one claim".
+
+    The builder gates the explicit announcement ("I also led X"), which is
+    decidable. It cannot see the same defect arriving WITHOUT the announcement —
+    a reliability sentence left on a cloud-migration bullet, two lines above the
+    reliability bullet it belonged to. That was found by eye, twice.
+
+    ⚠️ The evidence under the threshold is thin: one true positive and two false
+    ones, separated by a floor. These tests pin the SHAPE of the rule, not the
+    number — especially the employer bound, which is a correctness constraint
+    rather than a tuning choice.
+    """
+
+    def _b(self, company, lead, rest):
+        return {
+            "company": company,
+            "lead": lead,
+            "rest": rest,
+            "text": lead + rest,
+            "tokens": resume_coverage.tokens(lead + rest),
+        }
+
+    def test_a_sentence_that_fits_a_sibling_far_better_is_flagged(self):
+        """Fixtures here are FULL-LENGTH on purpose.
+
+        The floor of 10 shared concepts is reachable only by bullets of the size
+        this tool actually runs on — roughly 300 to 500 characters. A compact
+        fixture cannot trip it, which is a real limitation rather than a testing
+        inconvenience: on a résumé of short bullets this check is silent, and
+        silence there means "cannot tell", not "clean".
+        """
+        bullets = [
+            self._b(
+                "Acme",
+                "Orchestrated a cloud migration",
+                " replacing legacy systems and standardizing the platform on BigQuery, dbt and"
+                " Cloud Composer, and built the data foundation on top of it."
+                " Data contracts with source systems breaching their SLAs, paired with a"
+                " pipeline error-check fix in Composer, cut pipeline failures 30% and improved"
+                " incident response across the estate.",
+            ),
+            self._b(
+                "Acme",
+                "Made the data reliable, and measured it",
+                " through data contracts with every source system, named SLAs, automated quality"
+                " checks and observability across the pipeline estate. A reliability function"
+                " took severe incidents to zero, held uptime at 100%, improved mean time to"
+                " resolution, and cut pipeline failures wherever a source system was breaching"
+                " its contract.",
+            ),
+        ]
+        rows = resume_coverage.misplaced(bullets)
+        self.assertTrue(rows, "the misplaced reliability sentence should be flagged")
+        self.assertIn("reliable", rows[0]["to_lead"])
+
+    def test_it_NEVER_proposes_moving_across_employers(self):
+        """A correctness bound, not a filter. Without it the check proposed moving
+        an Optimum reliability sentence into an Upright bullet — four times across
+        the shipped specs, every one a suggestion to attribute one employer's work
+        to another. No threshold fixes that: the sentences genuinely are similar,
+        because the same person did similar work at both places."""
+        shared = (
+            " with data contracts, SLAs, quality checks and observability; a reliability"
+            " function took severe incidents to zero, improved mean time to resolution,"
+            " and cut pipeline failures across every source system."
+        )
+        bullets = [
+            self._b(
+                "Acme",
+                "Orchestrated a cloud migration",
+                " on BigQuery and dbt."
+                " Data contracts with source systems breaching their SLAs, paired with a"
+                " pipeline error-check fix, cut pipeline failures 30%.",
+            ),
+            self._b("Otherco", "Made the data reliable, and measured it", shared),
+        ]
+        self.assertEqual(resume_coverage.misplaced(bullets), [])
+
+    def test_the_first_sentence_is_never_flagged(self):
+        """A bullet opens by serving its lead-in almost by construction; drift is
+        something that happens at the end."""
+        bullets = [
+            self._b(
+                "Acme",
+                "Led a team",
+                " with data contracts, SLAs, quality checks, observability and a"
+                " reliability function that cut pipeline failures across source systems.",
+            ),
+            self._b(
+                "Acme",
+                "Made the data reliable",
+                " with data contracts, SLAs, quality checks, observability and a"
+                " reliability function that cut pipeline failures across source systems.",
+            ),
+        ]
+        self.assertEqual(resume_coverage.misplaced(bullets), [])
+
+    def test_a_short_sentence_is_ignored(self):
+        bullets = [
+            self._b("Acme", "Led a team", " of six. It worked well."),
+            self._b("Acme", "Built the platform", " on BigQuery, dbt and Airflow."),
+        ]
+        self.assertEqual(resume_coverage.misplaced(bullets), [])
+
+    def test_a_clean_document_is_silent(self):
+        bullets = [
+            self._b(
+                "Acme",
+                "Led a team of engineers",
+                " across three domains. They shipped on time every quarter.",
+            ),
+            self._b(
+                "Acme",
+                "Built the warehouse on BigQuery",
+                " with dbt models and Airflow orchestration throughout the estate.",
+            ),
+        ]
+        self.assertEqual(resume_coverage.misplaced(bullets), [])
