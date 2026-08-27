@@ -341,13 +341,26 @@ def spec_bullets(spec: dict) -> list[dict]:
             company = entry.get("company", "?")
             for lead, rest in role.get("bullets") or []:
                 text = f"{lead}{rest}".strip()
-                out.append({"company": company, "text": text, "tokens": tokens(text)})
+                # lead/rest kept alongside `text` because misplaced() needs the two
+                # halves separately: the bold lead-in is the claim, and drift is a
+                # thing that happens in the continuation.
+                out.append(
+                    {
+                        "company": company,
+                        "text": text,
+                        "lead": lead,
+                        "rest": rest,
+                        "tokens": tokens(text),
+                    }
+                )
     for e in spec.get("earlier", []):
         if e.get("bullet"):
             out.append(
                 {
                     "company": e.get("company", "?"),
                     "text": e["bullet"],
+                    "lead": "",
+                    "rest": e["bullet"],
                     "tokens": tokens(e["bullet"]),
                 }
             )
@@ -433,6 +446,95 @@ def best_match(req_tokens: set[str], bullets: list[dict]) -> tuple[dict | None, 
         if n > best_n:
             best, best_n = b, n
     return best, best_n
+
+
+_SENT = re.compile(r"(?<=[.])\s+")
+
+
+def misplaced(bullets: list[dict]) -> list[dict]:
+    """Sentences sitting in the wrong bullet.
+
+    THE STRUCTURAL VERSION OF "one bullet, one claim". The builder gates the
+    explicit announcement — a trailing "I also led X" — which is decidable and
+    nearly silent. It cannot see the same defect arriving without the
+    announcement, and that half was found twice by eye:
+
+      - a bullet about replacing command-and-control ended "I also led the AI
+        tooling rollout", above a separate bullet about AI;
+      - a bullet about a cloud migration ended on data contracts and pipeline
+        failures, which is the reliability bullet's territory two lines down.
+
+    The test is not "do these sentences feel unrelated" — that is a judgement and
+    it does not gate. It is comparative and needs no semantics: does this sentence
+    share MORE with a DIFFERENT bullet's lead-in than with its own? A sentence
+    that answers yes is not merely off-topic, it has somewhere better to be, and
+    naming that destination is what makes the finding actionable.
+
+    Only the continuation is examined, and only past the first sentence: a bullet
+    opens by serving its lead-in almost by construction, and drift is a thing that
+    happens at the end.
+    """
+    # Compared against the WHOLE of each other bullet, not against its lead-in.
+    # Lead-ins are five to ten words, so their concept sets are tiny and the signal
+    # drowns: the reliability sentence that really did belong two bullets down
+    # scored 2 against that bullet's lead-in and 13 against its full text. Measured
+    # before choosing, on the real case.
+    # SAME EMPLOYER ONLY, and this is a correctness bound rather than a filter.
+    # Without it the check proposed moving an Optimum reliability sentence into an
+    # Upright bullet — four times across the shipped specs, every one of them a
+    # suggestion to attribute one employer's work to another. A tool whose advice
+    # is occasionally fabrication is worse than no tool, and no ranking threshold
+    # can fix it, because the sentences genuinely are similar: the same person did
+    # similar work at both places. Only the employer boundary separates them.
+    whole = [
+        (i, concepts(tokens(b.get("lead", "") + b.get("rest", ""))), b.get("company"))
+        for i, b in enumerate(bullets)
+    ]
+    out = []
+    for i, b in enumerate(bullets):
+        rest = (b.get("rest") or "").strip()
+        sentences = _SENT.split(rest)
+        # Past the first sentence only: a bullet opens by serving its lead-in
+        # almost by construction, and drift is something that happens at the end.
+        for sent in sentences[1:]:
+            sc = concepts(tokens(sent))
+            if len(sc) < 4:
+                continue
+            # The sentence's own home, with the sentence itself removed — otherwise
+            # every sentence trivially matches the bullet it is sitting in.
+            home = concepts(tokens(b.get("lead", "") + " " + rest.replace(sent, " ")))
+            mine = len(sc & home)
+            best_j, best_n = None, 0
+            for j, other, co in whole:
+                if j == i or co != b.get("company"):
+                    continue
+                n = len(sc & other)
+                if n > best_n:
+                    best_j, best_n = j, n
+            # ⚠️ THE EVIDENCE UNDER THIS THRESHOLD IS THIN, and saying so is part of
+            # the rule. It is calibrated on ONE true positive (a reliability sentence
+            # left on a cloud-migration bullet: 13 against its real home, 3 against
+            # the bullet it sat in) and TWO false ones (8 against 3 and 4, both
+            # sentences that genuinely served their own lead-in). A floor of 10
+            # separates them, and two negative data points is not an operating point.
+            #
+            # The sibling repo measured this whole class of lexical check against
+            # ten known-bad citations and found no operating point at all. That is
+            # the reason this PRINTS AND NEVER GATES, and the reason a flag here is
+            # a prompt to look rather than a verdict. If it starts crying wolf,
+            # raise the floor or delete it — do not tune it until the count looks
+            # nice, which buys silence rather than accuracy.
+            if best_j is not None and best_n >= max(10, mine * 2):
+                out.append(
+                    {
+                        "from_lead": b.get("lead", ""),
+                        "to_lead": bullets[best_j].get("lead", ""),
+                        "sentence": sent,
+                        "own": mine,
+                        "other": best_n,
+                    }
+                )
+    return out
 
 
 def report(spec_path: str, jd_text: str, top: int = 6) -> int:
@@ -560,6 +662,16 @@ def report(spec_path: str, jd_text: str, top: int = 6) -> int:
 
     counts = inherited(spec_path, bullets)
     carried = sorted(((n, b) for b, n in counts.items() if n), reverse=True, key=lambda x: x[0])
+    mis = misplaced(bullets)
+    print("MISPLACED — a sentence that fits another bullet's lead-in better than its own")
+    if not mis:
+        print("   none\n")
+    for m in mis[:top]:
+        print(f"   in : {m['from_lead'][:64]}")
+        print(f"   fits: {m['to_lead'][:64]}   ({m['other']} vs {m['own']} shared)")
+        print(f"      {m['sentence'][:88]}")
+    print()
+
     print("INHERITED — appears verbatim in other applications")
     if not carried:
         print("   none — every bullet is unique to this application")
