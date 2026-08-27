@@ -123,3 +123,77 @@ class TestHardVersusAdvisory(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestForbiddenClaimsAreEmployerScoped(unittest.TestCase):
+    """A forbidden claim is its own rule shape, not a metric.
+
+    `never_words` hangs off a metric, so it only fires where a registered FIGURE
+    is present. That works for "never say GREW beside the 25-person headcount" and
+    is useless for "he never held a budget at this employer" — the false claim
+    carries no number to key on, and neither does the honest version. Anchoring it
+    to a fake metric was tried and silently did not fire.
+    """
+
+    def _spec(self, text, company):
+        return {
+            "experience": [
+                {
+                    "company": company,
+                    "title": "Head of Data",
+                    "location_dates": "City, ST | June 2022 – September 2023",
+                    "bullets": [["Built the function", text]],
+                }
+            ]
+        }
+
+    def setUp(self):
+        import metric_registry
+
+        self.mr = metric_registry
+        # The rule is supplied here rather than read from the user's registry.
+        # CI scaffolds a BLANK template config, so a test leaning on real personal
+        # data passes locally and fails there — which is the entire reason
+        # ci_local.py exists, and it caught exactly that on this test.
+        self.data = {
+            "metrics": [],
+            "not_a_claim": [],
+            "never_together": [],
+            "forbidden_claims": [
+                {
+                    "id": "upright.budget_ownership",
+                    "employers": ["Upright"],
+                    "words": ["budget", "p&l"],
+                    "why": "no budget ownership at this employer",
+                }
+            ],
+        }
+
+    def test_the_forbidden_word_fires_for_the_named_employer(self):
+        w = self.mr.warnings(
+            self._spec(" owning architecture, roadmap, and budget.", "Upright"), data=self.data
+        )
+        self.assertTrue(any("FORBIDDEN CLAIM" in x for x in w))
+
+    def test_the_honest_version_is_silent(self):
+        w = self.mr.warnings(
+            self._spec(
+                " owning architecture and roadmap, and negotiating purchases"
+                " directly with the CEO.",
+                "Upright",
+            ),
+            data=self.data,
+        )
+        self.assertFalse(any("FORBIDDEN CLAIM" in x for x in w))
+
+    def test_a_DIFFERENT_employer_may_carry_the_same_word(self):
+        """Budget ownership is real at The Hartford. A rule that fired everywhere
+        would be wrong about a true claim, and would get switched off."""
+        w = self.mr.warnings(
+            self._spec(
+                " across three teams on a $10M+ annual budget.",
+                "The Hartford Financial Services Group",
+            ),
+            data=self.data,
+        )
+        self.assertFalse(any("FORBIDDEN CLAIM" in x for x in w))

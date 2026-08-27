@@ -256,12 +256,38 @@ def warnings(spec: dict, data: dict | None = None) -> list[str]:
       4. NEVER-TOGETHER two figures a reader will wrongly combine (option C)
     """
     data = load() if data is None else data
+    out: list[str] = []
+    # 6: claims an employer cannot carry AT ALL, with no number to anchor on.
+    #
+    # `never_words` (below) hangs off a metric, so it only fires where a registered
+    # figure is present. That is right for "never say GREW beside the 25-person
+    # headcount" and useless for "he never held a budget at this employer" — the
+    # false claim there contains no figure to key on, and the honest version does
+    # not either. Anchoring it to a fake metric was tried and did not fire: the team
+    # size is spelled "six", which the number scanner deliberately ignores as too
+    # small to mislead.
+    #
+    # So a forbidden claim is its own kind of rule: an employer, the words, and why.
+    # Not a metric, and it should not pretend to be one.
+    for company, text in _strings(spec):
+        low = text.lower()
+        for rule in data.get("forbidden_claims", []):
+            if rule.get("employers") and company and company not in rule["employers"]:
+                continue
+            for w in rule.get("words", []):
+                if re.search(rf"\b{re.escape(w.lower())}\b", low):
+                    out.append(f"FORBIDDEN CLAIM ({rule['id']}): {w!r} — {rule['why']}")
+                    break
+
     if not data.get("metrics"):
         # An empty allowlist means "not configured yet", not "nothing is allowed".
         # Without this a fresh install would flag every number on every document.
-        return []
+        #
+        # The forbidden-claims pass runs ABOVE this deliberately: it does not read
+        # the allowlist at all, and leaving it below meant a registry configured
+        # with only forbidden claims enforced nothing while looking configured.
+        return sorted(set(out))
     idx = _index(data)
-    out: list[str] = []
 
     # 0: PHRASE tokens first — any registered token that is not a single number
     # (a hyphenated range, a spelled-out quantity, a percentage range). The bare
