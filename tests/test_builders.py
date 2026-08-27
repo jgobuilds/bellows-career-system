@@ -3,7 +3,9 @@ resume ATS-rule validator. Config-free (needs python-docx only). Stdlib unittest
 """
 
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(
@@ -514,6 +516,119 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
         )
         resume_builder.validate(spec)
         self.assertNotIn("company", spec["experience"][0]["roles"][0])
+
+
+class TestACompanyBlockIsNeverSplitAcrossPages(unittest.TestCase):
+    """A company header must arrive on the same page as its own content.
+
+    Word breaks between paragraphs wherever the page runs out, so a company name
+    could sit alone at the foot of one page with its title, dates and bullets on
+    the next. That reads as two different employers and forces the reader back a
+    page to work out whose job they are looking at.
+
+    The fix is `keep_with_next` chained down company -> title -> dates, which
+    binds the header to at least its first bullet and pushes the whole block over
+    instead. It is invisible in the text stream, so nothing else can catch a
+    regression: only the paragraph properties say whether it is still on.
+    """
+
+    def _doc(self, spec):
+        import docx
+
+        out = os.path.join(self.tmp, "r.docx")
+        resume_builder.build_resume(spec, out)
+        return docx.Document(out)
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def _spec(self, **extra):
+        spec = {
+            "name": "A Person",
+            "contact": "Somewhere, ZZ | a@b.co",
+            "summary": "A summary.",
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                    "bullets": [["Did a thing", " and it worked."]],
+                }
+            ],
+        }
+        spec.update(extra)
+        return spec
+
+    def _bound(self, doc):
+        return [p.text for p in doc.paragraphs if p.paragraph_format.keep_with_next]
+
+    def test_company_title_and_dates_are_all_bound_to_what_follows(self):
+        bound = self._bound(self._doc(self._spec()))
+        self.assertIn("Acme", bound)
+        self.assertIn("Director of Data", bound)
+        self.assertIn("Somewhere, ZZ | May 2019 – Present", bound)
+
+    def test_a_bullet_is_NOT_bound(self):
+        # Only the header chain is bound. Binding bullets too would push whole
+        # multi-bullet roles onto a fresh page and waste most of the one before it.
+        doc = self._doc(self._spec())
+        bullets = [p.text for p in doc.paragraphs if p.text.startswith("•")]
+        self.assertTrue(bullets, "expected at least one bullet")
+        for b in bullets:
+            self.assertNotIn(b, self._bound(doc))
+
+    def test_stacked_sub_roles_each_bind_their_own_header(self):
+        spec = self._spec(
+            experience=[
+                {
+                    "company": "Acme",
+                    "roles": [
+                        {
+                            "title": "Director of Data",
+                            "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                            "bullets": [["Led", " a team."]],
+                        },
+                        {
+                            "title": "Senior Data Engineer",
+                            "location_dates": "Somewhere, ZZ | May 2016 – May 2019",
+                            "bullets": [["Built", " a pipeline."]],
+                        },
+                    ],
+                }
+            ]
+        )
+        bound = self._bound(self._doc(spec))
+        for text in (
+            "Acme",
+            "Director of Data",
+            "Senior Data Engineer",
+            "Somewhere, ZZ | May 2016 – May 2019",
+        ):
+            self.assertIn(text, bound)
+
+    def test_earlier_and_advisory_headers_bind_too(self):
+        spec = self._spec(
+            earlier=[
+                {
+                    "company": "Oldco",
+                    "title": "Analyst",
+                    "location_dates": "Somewhere, ZZ | June 2010 – May 2012",
+                    "bullet": "Did early work.",
+                }
+            ],
+            advisory=[
+                {
+                    "company": "Selfemployed",
+                    "title": "Fractional Head of Data",
+                    "location_dates": "Somewhere, ZZ | June 2022 – Present",
+                    "bullets": [["Advised", " a client."]],
+                }
+            ],
+        )
+        bound = self._bound(self._doc(spec))
+        for text in ("Oldco", "Analyst", "Selfemployed", "Fractional Head of Data"):
+            self.assertIn(text, bound)
 
 
 class TestBulletContinuationReadsAsOneSentence(unittest.TestCase):

@@ -508,6 +508,19 @@ def _para(d, before=0, after=0, align=None):
     return p
 
 
+def _keep_with_next(p):
+    """Bind a paragraph to the one after it so Word will not break between them.
+
+    A company name stranded at the foot of one page with its title, dates and
+    bullets on the next reads as two different employers, and the reader has to
+    turn back to work out whose job they are looking at. Chaining company ->
+    title -> dates means the header always arrives with at least its first
+    bullet, and Word pushes the whole block over instead.
+    """
+    p.paragraph_format.keep_with_next = True
+    return p
+
+
 def _section(d, text):
     p = _para(d, before=9, after=2)
     _run(p, text, bold=True, size=12, color=BRAND_BLUE)
@@ -591,13 +604,13 @@ def build_resume(spec, out_path):
         _section(d, "Professional Experience")
 
         def _role_block(title, location_dates, bullets, before):
-            _run(_para(d, before=before), title, bold=True)
-            _run(_para(d, after=1), location_dates)
+            _run(_keep_with_next(_para(d, before=before)), title, bold=True)
+            _run(_keep_with_next(_para(d, after=1)), location_dates)
             for lead, rest in bullets:
                 _bullet(d, lead, rest)
 
         for entry in spec["experience"]:
-            _run(_para(d, before=6), entry["company"], bold=True, size=11)
+            _run(_keep_with_next(_para(d, before=6)), entry["company"], bold=True, size=11)
             if entry.get("roles"):
                 for i, r in enumerate(entry["roles"]):
                     _role_block(r["title"], r["location_dates"], r["bullets"], before=3 if i else 0)
@@ -611,7 +624,7 @@ def build_resume(spec, out_path):
         # the Workday import dropping the current role entirely. Same block format
         # as any other entry; a bullet is optional and usually absent for old roles.
         for role in spec.get("earlier", []):
-            _run(_para(d, before=6), role["company"], bold=True, size=11)
+            _run(_keep_with_next(_para(d, before=6)), role["company"], bold=True, size=11)
             bullets = [["", role["bullet"]]] if role.get("bullet") else []
             _role_block(role["title"], role["location_dates"], bullets, before=0)
 
@@ -652,9 +665,9 @@ def build_resume(spec, out_path):
             # fix, because the trigger was the date overlap, not the company name).
             _section(d, "Advisory & Consulting")
             for entry in spec["advisory"]:
-                _run(_para(d, before=6), entry["company"], bold=True, size=11)
-                _run(_para(d), entry["title"], bold=True)
-                _run(_para(d, after=1), entry["location_dates"])
+                _run(_keep_with_next(_para(d, before=6)), entry["company"], bold=True, size=11)
+                _run(_keep_with_next(_para(d)), entry["title"], bold=True)
+                _run(_keep_with_next(_para(d, after=1)), entry["location_dates"])
                 for lead, rest in entry.get("bullets", []):
                     _bullet(d, lead, rest)
         if part == "experience" and spec.get("projects"):
