@@ -63,6 +63,226 @@ strong stellar proven track record experience ability able help helps helping
 )
 
 _WORD = re.compile(r"[a-z0-9][a-z0-9+#./-]*")
+
+# Recruiting vocabulary where two words mean one thing. Without this, "managing and
+# scaling Data Engineering teams" reads as UNANSWERED next to "Led a 25-person data
+# engineering organization" — the words differ, the claim does not, and the coverage
+# number is then wrong in the direction that causes real damage: it invents gaps,
+# which invites padding the resume to close them.
+#
+# Deliberately small and hand-written. Every group is a synonym in THIS domain, not
+# a loose association — "lead" and "manage" are the same claim, "lead" and "inspire"
+# are not. A bigger map would match more and mean less, and the failure would be
+# silent because an inflated score looks like good news.
+CONCEPTS = {
+    "LEAD": (
+        "lead",
+        "led",
+        "leading",
+        "manage",
+        "managing",
+        "managed",
+        "management",
+        "run",
+        "ran",
+        "running",
+        "direct",
+        "directed",
+        "head",
+        "headed",
+        "oversee",
+        "oversaw",
+        "own",
+        "owns",
+        "owned",
+        "owning",
+        "supervise",
+    ),
+    "SCALE": (
+        "scale",
+        "scaling",
+        "scaled",
+        "grow",
+        "grew",
+        "growing",
+        "growth",
+        "expand",
+        "expanded",
+        "expansion",
+        "hypergrowth",
+    ),
+    "DEVELOP": (
+        "develop",
+        "developed",
+        "developing",
+        "coach",
+        "coached",
+        "coaching",
+        "mentor",
+        "mentored",
+        "upskill",
+        "upskilling",
+        "train",
+        "training",
+        "enable",
+        "enablement",
+        "cultivate",
+        "empower",
+        "empowered",
+    ),
+    "BUILD": (
+        "build",
+        "built",
+        "building",
+        "establish",
+        "established",
+        "create",
+        "created",
+        "stood",
+        "found",
+        "founded",
+        "architect",
+        "architected",
+        "designed",
+    ),
+    "PARTNER": (
+        "collaborate",
+        "collaboration",
+        "partner",
+        "partnered",
+        "partnering",
+        "partnership",
+        "stakeholder",
+        "cross-functional",
+        "influence",
+        "align",
+        "alignment",
+        "communicate",
+        "communication",
+    ),
+    "DELIVER": (
+        "deliver",
+        "delivered",
+        "delivery",
+        "ship",
+        "shipped",
+        "launch",
+        "launched",
+        "execute",
+        "execution",
+        "outcome",
+        "outcomes",
+        "on-time",
+        "benchmark",
+    ),
+    "QUALITY": (
+        "quality",
+        "reliability",
+        "reliable",
+        "trust",
+        "trusted",
+        "trustworthy",
+        "observability",
+        "accuracy",
+        "sla",
+        "slas",
+        "incident",
+        "uptime",
+    ),
+    "GOVERN": (
+        "governance",
+        "governed",
+        "steward",
+        "stewardship",
+        "policy",
+        "compliance",
+        "classification",
+        "lineage",
+        "catalog",
+        "metadata",
+        "contract",
+        "contracts",
+    ),
+    "PIPELINE": (
+        "pipeline",
+        "pipelines",
+        "etl",
+        "elt",
+        "ingestion",
+        "ingest",
+        "transform",
+        "transformation",
+        "orchestration",
+        "warehouse",
+        "lakehouse",
+        "infrastructure",
+    ),
+    "MODEL": (
+        "model",
+        "modeling",
+        "models",
+        "modelling",
+        "dimensional",
+        "schema",
+        "semantic",
+        "canonical",
+        "domain-driven",
+        "mesh",
+        "medallion",
+    ),
+    "IMPACT": (
+        "impact",
+        "business",
+        "value",
+        "roi",
+        "revenue",
+        "cost",
+        "savings",
+        "trade-offs",
+        "tradeoffs",
+        "strategic",
+        "prioritization",
+        "prioritize",
+    ),
+    "PRODUCT": ("product", "products", "ownership", "owner", "owners"),
+    "CRAFT": (
+        "craft",
+        "excellence",
+        "standards",
+        "best",
+        "practices",
+        "knowledge",
+        "sharing",
+        "improvement",
+        "rigor",
+        "review",
+    ),
+    "AI": (
+        "ai",
+        "llm",
+        "llms",
+        "agent",
+        "agents",
+        "genai",
+        "copilot",
+        "automation",
+        "automate",
+        "automated",
+    ),
+}
+_CONCEPT_OF = {w: c for c, words in CONCEPTS.items() for w in words}
+
+
+def concepts(toks: set[str]) -> set[str]:
+    """Fold a token set into concept ids, keeping any token that maps to none.
+
+    Returned alongside the raw tokens rather than replacing them: an exact tool
+    name must still match exactly, and collapsing "bigquery" into a concept would
+    lose the one comparison where only the literal string counts.
+    """
+    return {_CONCEPT_OF.get(t, t) for t in toks}
+
+
 # A profile accomplishment line: "- <text> | Result: <r> | Themes: <t1, t2> `[notes]`"
 _ACC = re.compile(r"^\s*-\s+(?P<body>.+?)\s*$")
 
@@ -180,7 +400,44 @@ def inherited(spec_path: str, bullets: list[dict]) -> dict[str, int]:
     return counts
 
 
+# A requirement counts as answered when a bullet hits a PROPORTION of what it asks
+# for, not a fixed number of words. A flat threshold cannot work because
+# requirements are not the same length: "Embrace AI and LLMs to accelerate
+# repetitive tasks" carries about four ideas and a bullet answering two of them has
+# answered it, while a long compound requirement needs more before the match is
+# real. A flat 3 marked the AI requirement uncovered on a resume whose bullet is
+# about shipping agents.
+#
+# Two conditions, both cheap to state and neither tuned to make the number look
+# better: at least two ideas in common, and at least a third of what was asked.
+COVER_MIN_HITS = 2
+COVER_MIN_RATIO = 0.30
+
+# Published guidance to candidates is roughly this: meet most of what is asked and
+# leave room to grow. A resume claiming EVERYTHING is not a stronger application,
+# it is a less believable one — and it usually means bullets were stretched to
+# reach. So the target is a band with a ceiling, not a maximum.
+TARGET_LOW, TARGET_HIGH = 0.70, 0.90
+
+
+def best_match(req_tokens: set[str], bullets: list[dict]) -> tuple[dict | None, int]:
+    """The resume bullet that best answers a requirement, and by how much.
+
+    Matched on CONCEPTS, not raw words, so a requirement to "manage and scale"
+    is answered by a bullet that says "led" and "25-person".
+    """
+    req = concepts(req_tokens)
+    best, best_n = None, 0
+    for b in bullets:
+        n = len(req & concepts(b["tokens"]))
+        if n > best_n:
+            best, best_n = b, n
+    return best, best_n
+
+
 def report(spec_path: str, jd_text: str, top: int = 6) -> int:
+    import jd_requirements
+
     with open(spec_path, encoding="utf-8") as fh:
         spec = json.load(fh)
     jd = tokens(jd_text)
@@ -190,8 +447,73 @@ def report(spec_path: str, jd_text: str, top: int = 6) -> int:
         print(f"  no accomplishment lines found in {config.PROFILE_MD}")
         return 1
 
-    print(f"  posting: {len(jd)} content words   ·   profile pool: {len(accs)} accomplishments")
-    print(f"  resume:  {len(bullets)} bullets\n")
+    reqs = [r for r in jd_requirements.requirements(jd_text) if r["kind"] == "demonstrable"]
+    disp = [r for r in jd_requirements.requirements(jd_text) if r["kind"] == "disposition"]
+    techs = jd_requirements.technologies(jd_text)
+    spec_text = tokens(json.dumps(spec))
+
+    for r in reqs:
+        r["tokens"] = tokens(r["text"])
+        r["concepts"] = concepts(r["tokens"])
+        r["bullet"], r["hits"] = best_match(r["tokens"], bullets)
+        need = max(1, len(r["concepts"]))
+        r["covered"] = r["hits"] >= COVER_MIN_HITS and r["hits"] / need >= COVER_MIN_RATIO
+
+    got = sum(r["weight"] for r in reqs if r["covered"])
+    want = sum(r["weight"] for r in reqs) or 1
+    pct = got / want
+    gaps = [r for r in reqs if not r["covered"]]
+
+    print(f"  profile pool: {len(accs)} accomplishments   ·   resume: {len(bullets)} bullets")
+    print(f"  posting: {len(reqs)} demonstrable requirement(s), {len(disp)} dispositional\n")
+
+    band = (
+        "on target"
+        if TARGET_LOW <= pct <= TARGET_HIGH
+        else (
+            "below target — close the closable gaps below"
+            if pct < TARGET_LOW
+            else "above target — check nothing was stretched to reach"
+        )
+    )
+    print(f"REQUIREMENT COVERAGE   {pct:.0%}  (weighted)   → {band}")
+    print(f"   target band {TARGET_LOW:.0%}–{TARGET_HIGH:.0%}. Gaps are normal and fine to show;")
+    print("   a document answering everything reads as stretched, not as strong.\n")
+
+    # Technologies are the one place an exact match is the whole game.
+    missing_tech = [
+        t
+        for t in techs
+        if t.replace(" ", "") not in "".join(sorted(spec_text))
+        and not any(t in b["text"].lower() for b in bullets)
+        and t not in " ".join(spec_text)
+    ]
+    have = [t for t in techs if t not in missing_tech]
+    if techs:
+        print(f"NAMED TECHNOLOGIES   {len(have)}/{len(techs)}")
+        print(f"   on the resume : {', '.join(have) if have else '(none)'}")
+        print(f"   NOT on it     : {', '.join(missing_tech) if missing_tech else '(none)'}")
+        if missing_tech:
+            print("   ⛔ A named tool you have not used is a REAL gap. Never reach for a")
+            print("      near-neighbour to cover one — that trade costs more than the keyword.")
+        print()
+
+    if gaps:
+        print(f"GAPS — {len(gaps)} requirement(s) with nothing answering them")
+        for r in sorted(gaps, key=lambda x: -x["weight"]):
+            rc = concepts(r["tokens"])
+            closable = sorted(
+                (a for a in accs if not _on_resume(a, bullets)),
+                key=lambda a: -len(concepts(a["tokens"]) & rc),
+            )
+            best = closable[0] if closable else None
+            n = len(concepts(best["tokens"]) & rc) if best else 0
+            print(f"   [w{r['weight']}] {r['text'][:82]}")
+            if best and n >= COVER_MIN_HITS and n / max(1, len(rc)) >= COVER_MIN_RATIO:
+                print(f"         ↳ CLOSABLE from the profile: {best['claim'][:66]}")
+            else:
+                print("         ↳ no profile evidence — a real gap, and fine to have")
+        print()
 
     missing = sorted(
         (a for a in accs if not _on_resume(a, bullets)),

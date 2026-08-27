@@ -164,3 +164,54 @@ class TestSpecBullets(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestConceptFolding(unittest.TestCase):
+    """Without this, "managing and scaling teams" reads as unanswered next to
+    "Led a 25-person organization" — same claim, different words. The number was
+    then wrong in the direction that does damage: it invents gaps, which invites
+    padding a resume to close them."""
+
+    def test_lead_and_manage_are_the_same_claim(self):
+        self.assertEqual(resume_coverage.concepts({"led"}), resume_coverage.concepts({"managing"}))
+
+    def test_develop_and_coach_are_the_same_claim(self):
+        self.assertEqual(
+            resume_coverage.concepts({"developed"}), resume_coverage.concepts({"mentored"})
+        )
+
+    def test_an_unmapped_word_survives_unchanged(self):
+        self.assertEqual(resume_coverage.concepts({"actuarial"}), {"actuarial"})
+
+    def test_a_tool_name_is_NOT_folded(self):
+        # exact-match is the whole game for a named technology
+        self.assertEqual(resume_coverage.concepts({"bigquery"}), {"bigquery"})
+        self.assertNotEqual(
+            resume_coverage.concepts({"bigquery"}), resume_coverage.concepts({"snowflake"})
+        )
+
+    def test_unrelated_verbs_do_not_collide(self):
+        self.assertNotEqual(
+            resume_coverage.concepts({"led"}), resume_coverage.concepts({"collaborate"})
+        )
+
+
+class TestBestMatch(unittest.TestCase):
+    def _bullets(self, *texts):
+        return [{"text": t, "tokens": resume_coverage.tokens(t)} for t in texts]
+
+    def test_it_matches_across_synonyms(self):
+        req = resume_coverage.tokens("managing and scaling data engineering teams")
+        b = self._bullets("Led a 25-person data engineering organization across three teams")
+        best, hits = resume_coverage.best_match(req, b)
+        self.assertIsNotNone(best)
+        self.assertGreaterEqual(hits, 2)
+
+    def test_an_unrelated_bullet_scores_low(self):
+        req = resume_coverage.tokens("managing and scaling data engineering teams")
+        b = self._bullets("Automated broker compensation reporting and quarterly close")
+        _, hits = resume_coverage.best_match(req, b)
+        self.assertLess(hits, 2)
+
+    def test_no_bullets_is_safe(self):
+        self.assertEqual(resume_coverage.best_match({"anything"}, []), (None, 0))

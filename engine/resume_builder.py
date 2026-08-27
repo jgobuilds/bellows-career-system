@@ -202,7 +202,9 @@ def _all_roles(spec):
         else:
             roles.append(e)
     roles.extend(spec.get("advisory", []))
-    roles.extend(spec.get("earlier", []))
+    # Tagged, because the oldest roles play a different part: they hold the TIMELINE
+    # open. See the no-content-line rule below, which deliberately exempts them.
+    roles.extend({**e, "_earlier": True} for e in spec.get("earlier", []))
     return roles
 
 
@@ -426,9 +428,20 @@ def validate(spec):
                     f"rest are one sentence, so it should read on with a space or a comma. "
                     f"Rewrite rather than deleting the punctuation: {str(lead)[:44]!r}"
                 )
-        # Every role should carry at least one line. A bare title-and-dates entry
-        # reads as filler to a human and gives an ATS nothing to match on, so the
-        # tenure it was added to prove is the only thing it contributes.
+        # Every CURRENT-ERA role should carry at least one line. A recent entry with
+        # only a title and dates reads as unfinished, and gives an ATS nothing to
+        # match on.
+        #
+        # ⚠️ `earlier` ENTRIES ARE EXEMPT, and that is the rule rather than an
+        # oversight. The oldest roles earn their place by holding the TIMELINE open —
+        # tenure, progression, no unexplained gap — which is exactly why the
+        # title-and-dates-only form is standard for a long career. A bullet there is
+        # optional, and it has to earn its line against the posting like any other:
+        # `resume_coverage.py` scored one shipped earlier-role bullet at ZERO across a
+        # whole posting while it sat in eight documents. Requiring a line would have
+        # forced that bullet to stay. This warning used to fire on `earlier` too,
+        # which contradicted the renderer's own note that a bullet is "optional and
+        # usually absent for old roles".
         #
         # WARNS RATHER THAN FILLING THE GAP. The line has to come from
         # career-profile.md, and a builder that invented one would be fabricating —
@@ -438,7 +451,9 @@ def validate(spec):
         #
         # `earlier` entries carry a singular `bullet` string while experience and
         # advisory carry a `bullets` list; both count.
-        if not (role.get("bullets") or str(role.get("bullet") or "").strip()):
+        if not role.get("_earlier") and not (
+            role.get("bullets") or str(role.get("bullet") or "").strip()
+        ):
             warns.append(
                 f"role has no content line: {role.get('company', '?')} — {t!r}. "
                 f"Add one from career-profile.md, or fold the dates into the role "

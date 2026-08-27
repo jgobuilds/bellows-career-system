@@ -472,7 +472,18 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
         )
         self.assertEqual(self._bare_role_warnings(spec), [])
 
-    def test_an_earlier_entry_with_no_bullet_warns(self):
+    def test_an_earlier_entry_with_no_bullet_is_FINE(self):
+        """The oldest roles earn their place by holding the TIMELINE open — tenure,
+        progression, no unexplained gap — so title-and-dates-only is the standard
+        form for a long career, not an unfinished entry.
+
+        This asserted the opposite until 2026-08-24, which contradicted the
+        renderer's own note that a bullet is "optional and usually absent for old
+        roles". The rule that replaced it: an earlier bullet is optional and has to
+        earn its line against the posting like any other. A shipped one scored ZERO
+        across a whole job description while sitting in eight documents; requiring a
+        line would have forced it to stay.
+        """
         spec = self._spec(
             earlier=[
                 {
@@ -482,9 +493,9 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
                 }
             ]
         )
-        self.assertEqual(len(self._bare_role_warnings(spec)), 1)
+        self.assertEqual(self._bare_role_warnings(spec), [])
 
-    def test_an_empty_bullet_string_does_not_count(self):
+    def test_an_empty_bullet_string_on_an_earlier_entry_is_also_fine(self):
         spec = self._spec(
             earlier=[
                 {
@@ -495,7 +506,23 @@ class TestEveryRoleCarriesALine(unittest.TestCase):
                 }
             ]
         )
-        self.assertEqual(len(self._bare_role_warnings(spec)), 1)
+        self.assertEqual(self._bare_role_warnings(spec), [])
+
+    def test_a_MAIN_experience_role_with_no_bullets_still_warns(self):
+        """The exemption is for `earlier` only. A current-era role carrying nothing
+        reads as unfinished, and that is still worth flagging."""
+        spec = self._spec(
+            experience=[
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                }
+            ]
+        )
+        warns = self._bare_role_warnings(spec)
+        self.assertEqual(len(warns), 1)
+        self.assertIn("Acme", warns[0])
 
     def test_validation_does_not_mutate_the_spec(self):
         """_all_roles fills company onto COPIES; a synthetic key must never reach
