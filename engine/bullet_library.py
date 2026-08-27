@@ -160,6 +160,104 @@ def approve(spec: dict, note: str = "", data: dict | None = None, path: str = LI
     return added
 
 
+def backlog(data: dict | None = None) -> list[dict]:
+    """Everything already SHIPPED that the ledger has never checked.
+
+    The ledger only ever grows when someone runs `--approve`, so phrasings written
+    before it existed — or in a session where nobody ran it — are in documents that
+    went out while being invisible here. This is the queue for closing that.
+
+    IT IS MUCH SMALLER THAN IT LOOKS, and the reason matters. Counting distinct
+    phrasings across the applications gives a number in the hundreds, which reads
+    as an impossible backlog and invites either a blind bulk import (defeating the
+    point) or giving up. But verification is per-TOKEN: most of those hundreds are
+    rewordings of a fact already checked for that employer, and rewording is the
+    legitimate half of tailoring. The queue is the far smaller set that introduces
+    a claim this employer has never been verified to support.
+
+    Ordered by how many documents use it, because a phrasing already in eight
+    documents is the highest-leverage thing to check and the most expensive to
+    have wrong.
+    """
+    import glob
+
+    data = load() if data is None else data
+    approved_fp = {b["fp"] for rows in (data.get("employers") or {}).values() for b in rows}
+    approved_tok: dict[str, set] = {}
+    for co, rows in (data.get("employers") or {}).items():
+        approved_tok[co] = {t for b in rows if not b.get("revoked") for t in b.get("tokens", [])}
+
+    seen: dict[tuple, dict] = {}
+    root = os.path.join(os.path.dirname(LIBRARY), "*", "resume.json")
+    for path in sorted(glob.glob(root)):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                spec = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        folder = os.path.basename(os.path.dirname(path))
+        for co, lead, rest in spec_bullets(spec):
+            key = (co, lead, rest)
+            row = seen.setdefault(
+                key,
+                {
+                    "company": co,
+                    "lead": lead,
+                    "rest": rest,
+                    "fp": fingerprint(lead, rest),
+                    "documents": [],
+                },
+            )
+            row["documents"].append(folder)
+
+    out = []
+    for row in seen.values():
+        if row["fp"] in approved_fp:
+            continue
+        new = sorted(
+            material_tokens(f"{row['lead']}{row['rest']}") - approved_tok.get(row["company"], set())
+        )
+        if not new:
+            continue  # a rewording of something already checked
+        row["new_tokens"] = new
+        row["warnings"] = _phrasing_warnings(row["company"], row["lead"], row["rest"])
+        out.append(row)
+    return sorted(out, key=lambda r: (-len(r["documents"]), r["company"]))
+
+
+def accept(fps: set[str], note: str, data: dict | None = None, path: str = LIBRARY) -> int:
+    """Approve NAMED phrasings out of the backlog, and only those.
+
+    `--approve <spec>` takes a whole document at once, which is right when the
+    document has just been reviewed end to end. It is wrong for the backlog: a
+    spec that shipped months ago usually contains several fine phrasings and one
+    that should never have gone out, and approving by document would sweep the bad
+    one in under cover of the good ones. Reviewing by fingerprint keeps the unit of
+    judgement the same as the unit of evidence.
+    """
+    data = load(path) if data is None else data
+    emp = data.setdefault("employers", {})
+    wanted = {r["fp"]: r for r in backlog(data) if r["fp"] in fps}
+    added = 0
+    for fp, row in wanted.items():
+        bucket = emp.setdefault(row["company"], [])
+        if fp in {b["fp"] for b in bucket}:
+            continue
+        bucket.append(
+            {
+                "fp": fp,
+                "lead": row["lead"],
+                "rest": row["rest"],
+                "tokens": sorted(material_tokens(f"{row['lead']}{row['rest']}")),
+                "approved": date.today().isoformat(),
+                "note": note,
+            }
+        )
+        added += 1
+    save(data, path)
+    return added
+
+
 def _phrasing_warnings(company: str, lead: str, rest: str) -> list[str]:
     """Re-check one stored phrasing against the rules AS THEY STAND NOW."""
     import metric_registry
@@ -285,6 +383,16 @@ def main() -> int:
         action="store_true",
         help="re-check every approved phrasing against the rules as they stand now",
     )
+    g.add_argument(
+        "--backlog",
+        action="store_true",
+        help="shipped phrasings the ledger has never checked, highest-leverage first",
+    )
+    g.add_argument(
+        "--accept",
+        metavar="FP[,FP...]",
+        help="approve named backlog fingerprints, and only those (needs --note)",
+    )
     g.add_argument("--stats", action="store_true")
     ap.add_argument("--top", type=int, default=5)
     ap.add_argument("--fix", action="store_true", help="with --revalidate: revoke what fails")
@@ -295,6 +403,40 @@ def main() -> int:
         data = load()
         for co, bullets in sorted(data.get("employers", {}).items()):
             print(f"  {co[:40]:42} {len(bullets)} approved phrasing(s)")
+        return 0
+
+    if a.accept:
+        if not a.note:
+            print("  --accept needs --note: record WHY these were judged correct.")
+            return 1
+        fps = {x.strip() for x in a.accept.split(",") if x.strip()}
+        n = accept(fps, note=a.note)
+        print(f"  approved {n} phrasing(s) from the backlog")
+        missed = fps - {b["fp"] for rows in load()["employers"].values() for b in rows}
+        if missed:
+            print(f"  ⚠ not found in the backlog: {', '.join(sorted(missed))}")
+        return 0
+
+    if a.backlog:
+        rows = backlog()
+        if not rows:
+            print("  Nothing shipped is unchecked. The ledger covers every claim in every spec.")
+            return 0
+        print(f"  {len(rows)} shipped phrasing(s) introduce a claim this ledger has never")
+        print("  checked for that employer. Ordered by how many documents use each —")
+        print("  a phrasing already in eight documents is the most expensive to have wrong.\n")
+        for r in rows[: a.top]:
+            docs = len(r["documents"])
+            print(f"  [{r['company'][:30]:32}] in {docs} document(s)")
+            print(f"     {r['lead']}{r['rest'][:96]}")
+            print(f"     new claim(s): {', '.join(r['new_tokens'])}")
+            for w in r["warnings"]:
+                print(f"     ⛔ {w[:100]}")
+            print(f"     used by: {', '.join(sorted(set(r['documents']))[:4])}")
+            print()
+        if len(rows) > a.top:
+            print(f"  ... {len(rows) - a.top} more. Raise --top to see them.")
+        print("  Read each against career-profile.md, then --approve the spec it lives in.")
         return 0
 
     if a.revalidate:
