@@ -41,17 +41,18 @@
     {
       "id": "vendored-file-fails-the-linter",
       "match": [
-        "ruff",
-        "Found "
+        "Found ",
+        "error"
       ],
       "not_match": [
-        "All checks passed"
+        "source file"
       ],
+      "same_line": true,
       "cause": "A linter or formatter is being run over a VENDORED file that must stay byte-identical to its upstream copy. The LINTER rejects it.",
       "fix": "Add the vendored paths to the tool's exclude list (ruff `extend-exclude`, which covers BOTH `check` and `format`). Without it the tool and the re-sync overwrite each other forever, and the drift check reports drift on every run until someone ignores it.",
       "confidence": "high",
       "first_seen": "2026-07-26",
-      "_note": "TWO rows, not one loosened row. The original keyed on \"would be reformatted\" and so caught only `ruff format`; the next repo in the sweep failed on `ruff check` instead. Widening it to match \"ruff\" then fired on a CLEAN format run — `match` is AND-only across the whole log, so it cannot express \"either message\". Same cause with two different messages is two signatures.",
+      "_note": "TWO rows, not one loosened row. The original keyed on \"would be reformatted\" and so caught only `ruff format`; the next repo in the sweep failed on `ruff check` instead. Widening it to match \"ruff\" then fired on a CLEAN format run — `match` is AND-only across the whole log, so it cannot express \"either message\". Same cause with two different messages is two signatures. THIRD REVISION, same collision a third time: \"ruff\" AND \"Found \" anywhere in the log matched ci_diagnose's OWN test output, which prints \"PASS  clean ruff check claims no cause\" while exercising this very row and \"False positives found in the wild\" as a heading — the cause table matched the test that tests the cause table (ai-control-plane runs 30855032473 and 30828947680, both really \"FAILED: 1 check(s)\"). The signature is now ruff's summary LINE, `same_line`, so a passing assertion that merely names the tool cannot supply half of it. \"ruff\" is not in the terms because it is never on that line — the command echo and the summary are different lines, which is exactly why whole-log AND was reached for. `not_match: source file` separates mypy, which prints \"Found 3 errors in 1 file (checked 12 source files)\" and runs in the SAME job as ruff in two consuming repos.",
       "prevent": "Same exclude list covers `check` as well as `format`. Adding a vendored file and adding its exclusion is one action, not two."
     },
     {
