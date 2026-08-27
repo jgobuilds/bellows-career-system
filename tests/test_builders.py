@@ -818,3 +818,63 @@ class TestEarlierRolesCanCarryABoldLeadIn(unittest.TestCase):
         }
         warns = [w for w in resume_builder.validate(spec) if "no content line" in w]
         self.assertEqual(warns, [])
+
+
+class TestOneBulletOneClaim(unittest.TestCase):
+    """A trailing "I also led X" is a second, unrelated claim riding on the first.
+
+    Caught live: a bullet about replacing command-and-control ended "I also led the
+    AI tooling rollout", sitting immediately above a separate bullet about AI — so
+    the reader met the same subject twice, once badly.
+
+    Measured before enforcing: 2 of 417 bullets across every spec on record. At
+    that rate the rule is nearly silent, which is what makes it worth having.
+    """
+
+    def _spec(self, rest):
+        return {
+            "experience": [
+                {
+                    "company": "Acme",
+                    "title": "Director of Data",
+                    "location_dates": "Somewhere, ZZ | May 2019 – Present",
+                    "bullets": [["Replaced command-and-control", rest]],
+                }
+            ]
+        }
+
+    def _warns(self, rest):
+        return [w for w in resume_builder.validate(self._spec(rest)) if "one claim" in w]
+
+    def test_an_appended_claim_warns(self):
+        self.assertEqual(len(self._warns(" on a team. I also led the tooling rollout.")), 1)
+
+    def test_the_we_form_warns_too(self):
+        self.assertEqual(len(self._warns(" on a team. We also ran the migration.")), 1)
+
+    def test_a_sentence_opening_Also_warns(self):
+        self.assertEqual(len(self._warns(" on a team. Also, the migration shipped.")), 1)
+
+    def test_a_single_claim_is_SILENT(self):
+        self.assertEqual(self._warns(" on a team, and they began experimenting."), [])
+
+    def test_a_multi_sentence_bullet_on_ONE_claim_is_silent(self):
+        """Length is not the defect. A bullet may take three sentences to make one
+        claim, and flagging that would make the rule noisy enough to switch off."""
+        self.assertEqual(
+            self._warns(
+                " on a team shaped by a decade of habit. They began experimenting and"
+                " speaking up. Capacity followed."
+            ),
+            [],
+        )
+
+    def test_the_word_also_alone_does_not_fire(self):
+        """ "...a framework that also covers escalation" is one claim. Only the
+        explicit I/we announcement counts."""
+        self.assertEqual(self._warns(" with a framework that also covers escalation."), [])
+
+    def test_the_message_names_the_lead_in_and_the_fix(self):
+        w = self._warns(" on a team. I also led the tooling rollout.")[0]
+        self.assertIn("Replaced command-and-control", w)
+        self.assertIn("Split it out", w)

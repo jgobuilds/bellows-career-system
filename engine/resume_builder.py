@@ -146,6 +146,22 @@ _LOC_OK = re.compile(r"^.+,\s*[A-Z]{2}\s*\|\s*.+$")  # "City, ST | dates"
 # are the house shape and are deliberately absent from this class.
 _BULLET_SEP = re.compile(r"^\s*([:;]|[-–—]\s)")
 
+# ONE BULLET, ONE CLAIM — and "also" is the word that announces the breach.
+#
+# A bullet's bold lead-in states what the bullet is about. A trailing "I also led
+# X" is a second, unrelated claim riding on the first, and it costs twice: the
+# lead-in stops describing the bullet, and the appended claim gets a subordinate
+# clause where it needed its own line. Observed live: a bullet about replacing
+# command-and-control ended "I also led the AI tooling rollout", immediately above
+# a separate bullet about AI.
+#
+# MEASURED BEFORE BEING ENFORCED: 2 of 417 bullets across every spec on record.
+# At that rate the rule is nearly silent, which is what makes it worth having —
+# and the two it found were both real. Deliberately narrow: only the explicit
+# announcement, never an inferred topic change, because "these two sentences feel
+# unrelated" is a judgement and a gate that makes judgements gets switched off.
+_BULLET_ALSO = re.compile(r"\b(?:I|we)\s+also\b|\balso,", re.I)
+
 _MONTHS = {
     m: i
     for i, m in enumerate(
@@ -419,6 +435,14 @@ def validate(spec):
         # deleting a colon leaves ungrammatical text ("...how it moves a stewardship
         # model..."), so the fix is to rewrite the sentence, which is authorial work.
         for lead, rest in role.get("bullets", []) or []:
+            also = _BULLET_ALSO.search(str(rest))
+            if also:
+                warns.append(
+                    f"bullet appends a second claim with {also.group(0)!r} — one bullet, one "
+                    f"claim. The bold lead-in {str(lead)[:40]!r} states what this bullet is "
+                    f"about, and an appended claim both breaks that and gets a subordinate "
+                    f"clause where it needed its own line. Split it out, or cut it."
+                )
             sep = _BULLET_SEP.match(str(rest))
             if sep:
                 warns.append(

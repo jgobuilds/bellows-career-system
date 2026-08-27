@@ -44,6 +44,17 @@ Use the ATS-safe structure in `references/ats-format-rules.md`: single column, s
 
 **Quick health check.** After writing the spec, run `python engine/resume_score.py personal/applications/<company>/resume.json` for a fast 0-100 read across ATS-safety, quantified impact, and concision. It names the weak (unquantified) bullets and any structural warnings to fix *before* you build the `.docx` — a rule-based sanity check, not a benchmark. Aim to clear the ATS warnings and quantify what the profile can honestly support.
 
+**One bullet, one claim.** The bold lead-in states what a bullet is about, and everything
+after it has to serve that claim. A trailing *"I also led X"* is a second, unrelated claim
+riding on the first, and it costs twice: the lead-in stops describing the bullet, so a reader
+scanning lead-ins is misled about what the line holds, and the appended claim gets a
+subordinate clause where it needed its own line — reading as an afterthought because it was
+appended as one. The fix is a decision rather than a rewrite: the claim earns its own bullet,
+merges into the neighbouring bullet that already covers that topic, or does not belong on this
+document. `resume_builder.validate()` warns on the explicit `I also` / `Also,` join and on
+nothing inferred, because "these two sentences feel unrelated" is a judgement and a gate that
+makes judgements gets suppressed.
+
 **"I" vs "we" vs neither is decided by the CLAIM, not by tone.** Swapping globally in either
 direction costs the candidate, so decide per clause. A **judgment or decision** takes **I** —
 the decision itself is the evidence, and "we chose" hands away the thing being assessed.
