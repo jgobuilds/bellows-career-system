@@ -354,6 +354,34 @@ def warnings(spec: dict, data: dict | None = None) -> list[str]:
                     f"{sev}: {rule['a']!r} and {rule['b']!r} share one passage — {rule['why']}"
                 )
 
+    # 5: words a metric must never appear beside.
+    #
+    # Every metric already carries a `never` list, and it was PROSE — read by
+    # people, enforced by nothing. The 25-person figure has said "any growth verb
+    # — grew / built from / scaled from / from a single unit" since the registry
+    # was written, and four phrasings using exactly those verbs were nonetheless
+    # approved into the bullet library and offered back as suggestions. A rule
+    # that is written down and unenforced is indistinguishable from no rule; it is
+    # worse, because everyone believes it is being kept.
+    #
+    # `never_words` is the machine-checkable half. It sits beside the prose rather
+    # than replacing it: the prose says WHY, which a warning has to quote to be
+    # actionable, and the list says WHAT to match.
+    for company, text in _strings(spec):
+        low = text.lower()
+        toks = {t for t, _, _ in _numbers(text)}
+        for m in data.get("metrics", []):
+            words = m.get("never_words") or []
+            if not words or not (set(m.get("tokens", [])) & toks):
+                continue
+            if m.get("employers") and company and company not in m["employers"]:
+                continue
+            for w in words:
+                if re.search(rf"\b{re.escape(w.lower())}\b", low):
+                    why = (m.get("never") or ["registry forbids this pairing"])[0]
+                    out.append(f"FORBIDDEN PAIRING: {w!r} appears with {m['id']} — {why}")
+                    break
+
     return sorted(set(out))
 
 
