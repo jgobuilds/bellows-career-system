@@ -1,6 +1,6 @@
 # Dev/CI tools (the quality gate). Runtime deps are in requirements.txt.
 #   pip install -r requirements-dev.txt
-ruff>=0.16.0            # lint + format (config in pyproject.toml [tool.ruff])
+ruff>=0.16.5            # lint + format (config in pyproject.toml [tool.ruff])
 mypy>=2.3.0            # type check — informational until the engine is packaged (H2)
 pre-commit>=4.6.1      # local git hooks (.pre-commit-config.yaml)
 pip-audit>=2.10.1       # dependency CVE audit against the OSV/PyPI advisory DB (CI gate)
